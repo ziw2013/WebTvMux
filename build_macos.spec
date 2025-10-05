@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Stable + Safe Build)
+# build_macos.spec — WebTvMux (Final Verified Build)
 # ===========================================
 
 import os
@@ -74,20 +74,30 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Filter out invalid or recursive datas (PyInstaller 3-tuple safe fix) ---
+# --- Filter out invalid or recursive datas (Final Safe Fix) ---
 valid_datas = []
 for item in a.datas:
     src = item[0]
     dest = item[1]
     typecode = item[2] if len(item) > 2 else "DATA"
 
-    # ✅ Skip folders and recursive self-references like dist/ or build/
-    if not os.path.isfile(src):
+    # ✅ Skip if nonexistent or a directory
+    if not os.path.exists(src) or not os.path.isfile(src):
         continue
-    if "dist" in src or "build" in src:
+
+    # ✅ Skip anything inside build/ or dist/ (prevents recursion)
+    if "/dist/" in src or "/build/" in src:
+        continue
+
+    # ✅ Skip anything referencing WebTvMux output folder itself
+    if src.endswith("WebTvMux") or "dist/WebTvMux" in src:
         continue
 
     valid_datas.append((src, dest, typecode))
+
+print("\n✅ Final data entries included in COLLECT:")
+for src, dest, _ in valid_datas:
+    print(f"  - {src} → {dest}")
 
 coll = COLLECT(
     exe,
