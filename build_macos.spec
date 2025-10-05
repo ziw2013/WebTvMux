@@ -3,13 +3,12 @@
 # ===========================================
 
 import os
-import zipfile
 from PyInstaller.utils.hooks import collect_submodules
 
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Collect only core PySide6 modules ---
+# --- Collect only necessary PySide6 modules ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
@@ -21,11 +20,9 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Exclude all unused modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
-    # Heavy Qt modules
     "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets",
     "PySide6.QtWebEngineQuick", "PySide6.QtWebChannel",
     "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtMultimedia",
@@ -34,12 +31,14 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Main Analysis ---
 a = Analysis(
     [entry_script],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        ("bin/*", "bin"),           # include ffmpeg, ffprobe, yt-dlp
+        ("config/*", "config"),     # include languages.json
+    ],
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     hookspath=[],
@@ -53,14 +52,14 @@ exe = EXE(
     a.scripts,
     name=app_name,
     console=False,
+    icon=os.path.abspath("icon.icns") if os.path.exists("icon.icns") else None,
     bundle_identifier="com.webtvmux.app",
 )
 
-# --- Create macOS .app bundle ---
 coll = BUNDLE(
     exe,
     name=f"{app_name}.app",
-    icon=os.path.abspath("icon.icns"),
+    icon=os.path.abspath("icon.icns") if os.path.exists("icon.icns") else None,
     bundle_identifier="com.webtvmux.app",
     info_plist={
         "CFBundleName": app_name,
@@ -72,7 +71,7 @@ coll = BUNDLE(
     },
 )
 
-# --- Create DMG package automatically ---
+# --- Create DMG after build ---
 dmg_path = os.path.join("dist", f"{app_name}.dmg")
 
 def create_dmg():

@@ -1,4 +1,4 @@
-name: Build macOS App (Unsigned)
+name: Build macOS App (Unsigned, Self-contained)
 
 on:
   push:
@@ -23,13 +23,47 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
+      # --- Prepare resources (binaries + config) ---
+      - name: Prepare bin and config folders
+        run: |
+          mkdir -p bin config
+
+          # If ffmpeg not already in repo, download it
+          if [ ! -f "bin/ffmpeg" ]; then
+            echo "⬇️ Downloading ffmpeg, ffprobe, and yt-dlp for macOS..."
+            curl -L -o bin/ffmpeg.zip https://evermeet.cx/ffmpeg/ffmpeg-7.0.zip
+            curl -L -o bin/ffprobe.zip https://evermeet.cx/ffmpeg/ffprobe-7.0.zip
+            curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+            unzip -o bin/ffmpeg.zip -d bin/
+            unzip -o bin/ffprobe.zip -d bin/
+            chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp
+          fi
+
+          # If languages.json missing, add placeholder
+          if [ ! -f "config/languages.json" ]; then
+            echo "{}" > config/languages.json
+          fi
+
+          echo "✅ Resources ready:"
+          ls -R bin config
+
+      # --- Build .app and .dmg ---
       - name: Build macOS .app and .dmg
         run: |
           pyinstaller build_macos.spec
+          echo "✅ Build finished."
           ls dist/
-          echo "✅ Unsigned macOS build complete — check dist/ for .app and .dmg"
 
-      - name: Upload artifacts
+      # --- Verify embedded resources inside app bundle ---
+      - name: Verify embedded resources
+        run: |
+          echo "🔍 Checking embedded files..."
+          ls dist/WebTvMux.app/Contents/MacOS/bin
+          echo "📜 languages.json content:"
+          cat dist/WebTvMux.app/Contents/MacOS/config/languages.json
+
+      # --- Upload artifacts ---
+      - name: Upload macOS build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: WebTvMux-macos-unsigned
