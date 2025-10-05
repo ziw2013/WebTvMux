@@ -1,4 +1,4 @@
-name: Build macOS App (Unsigned, Self-contained, Stable)
+name: Build macOS App (Unsigned, Stable, Self-contained)
 
 on:
   push:
@@ -10,84 +10,62 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # --- Checkout source code ---
+      # --- Checkout repo ---
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- Set up Python ---
+      # --- Setup Python environment ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # --- Install build dependencies ---
-      - name: Install dependencies
+      # --- Install dependencies ---
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      # --- Prepare binaries and config ---
-      - name: Prepare bin and config folders
+      # --- Prepare resources (binaries + config) ---
+      - name: Prepare bin and config
         run: |
           mkdir -p bin config
-          echo "⬇️ Preparing ffmpeg, ffprobe, and yt-dlp for macOS..."
+          echo "⬇️ Downloading ffmpeg, ffprobe, and yt-dlp for macOS..."
 
-          # Download universal binaries if not already present
-          if [ ! -f "bin/ffmpeg" ]; then
-            curl -L -o bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-mac
-            curl -L -o bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffprobe-mac
-            curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
-            chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp
-          fi
+          # Download universal static binaries
+          curl -L -o bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-mac
+          curl -L -o bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffprobe-mac
+          curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+          chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp
 
           # Add default config if missing
           if [ ! -f "config/languages.json" ]; then
             echo '{}' > config/languages.json
           fi
 
-          echo "✅ Resources ready:"
-          ls -l bin
-          ls -l config
-
-      # --- Pre-build sanity check ---
-      - name: Verify resources before build
-        run: |
-          echo "🔍 Pre-build resource verification:"
-          ls -l bin || echo "⚠️ bin folder missing"
-          ls -l config || echo "⚠️ config folder missing"
-          file bin/ffmpeg || true
-          file bin/ffprobe || true
-          file bin/yt-dlp || true
+          echo "✅ bin and config ready:"
+          find bin -type f -exec ls -lh {} \;
+          find config -type f -exec ls -lh {} \;
 
       # --- Build .app and .dmg ---
-      - name: Build macOS .app and .dmg
+      - name: Build macOS app and DMG
         run: |
-          echo "🚀 Starting PyInstaller build..."
+          echo "🚀 Running PyInstaller..."
           pyinstaller build_macos.spec
-          echo "✅ Build complete."
-          ls dist/
+          echo "✅ Build completed."
+          ls -lh dist/
 
-      # --- Post-build verification ---
+      # --- Verify embedded files inside app ---
       - name: Verify embedded resources
         run: |
-          echo "🔍 Checking embedded resources inside app bundle:"
-          if [ -d "dist/WebTvMux.app/Contents/MacOS/bin" ]; then
-            echo "✅ bin directory found:"
-            ls dist/WebTvMux.app/Contents/MacOS/bin
-          else
-            echo "⚠️ bin directory not found in app bundle."
-          fi
+          echo "🔍 Verifying embedded resources inside app bundle..."
+          find dist/WebTvMux.app/Contents/MacOS -maxdepth 2 -type f || echo "⚠️ bin/config not found inside bundle"
+          du -sh dist/WebTvMux.app || true
+          du -sh dist/WebTvMux.dmg || true
 
-          if [ -f "dist/WebTvMux.app/Contents/MacOS/config/languages.json" ]; then
-            echo "✅ languages.json found. Content preview:"
-            head -n 20 dist/WebTvMux.app/Contents/MacOS/config/languages.json
-          else
-            echo "⚠️ languages.json not found in app bundle."
-          fi
-
-      # --- Upload final artifacts (.app + .dmg) ---
-      - name: Upload macOS build artifacts
+      # --- Upload DMG artifact only (clean output) ---
+      - name: Upload macOS DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WebTvMux-macos-unsigned
-          path: dist/
+          name: WebTvMux-macos-dmg
+          path: dist/WebTvMux.dmg

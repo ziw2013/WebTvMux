@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (macOS Unsigned Stable Build)
+# build_macos.spec — WebTvMux (macOS Unsigned, Stable Build)
 # ===========================================
 
 import os
@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_submodules
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Collect PySide6 modules safely ---
+# --- Collect necessary PySide6 modules ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
@@ -21,7 +21,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Exclude unused or heavy modules ---
+# --- Exclude unused heavy Qt/Python modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
@@ -33,30 +33,38 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Gather all resource files (absolute paths) ---
-bin_files = [(os.path.abspath(f), "bin") for f in glob.glob("bin/*") if os.path.isfile(f)]
-config_files = [(os.path.abspath(f), "config") for f in glob.glob("config/*") if os.path.isfile(f)]
+# --- Gather all absolute resource paths ---
+root = os.path.abspath(".")
+bin_dir = os.path.join(root, "bin")
+config_dir = os.path.join(root, "config")
 
-print("\n📦 Files to include in build:")
-for f, dest in bin_files + config_files:
-    print(f"  - {f} → {dest}/")
+datas = []
+for folder, dest in [(bin_dir, "bin"), (config_dir, "config")]:
+    if os.path.isdir(folder):
+        for f in glob.glob(os.path.join(folder, "*")):
+            if os.path.isfile(f):
+                datas.append((f, dest))
 
-# --- Analysis stage ---
+print("\n📦 Resources included in build:")
+for src, dest in datas:
+    print(f"  - {src} → {dest}/")
+
+# --- Main analysis ---
 a = Analysis(
     [entry_script],
-    pathex=[],
+    pathex=[root],
     binaries=[],
-    datas=bin_files + config_files,
+    datas=datas,
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     hookspath=[],
     noarchive=False,
 )
 
-# --- Bundle pure Python modules ---
+# --- Package Python bytecode ---
 pyz = PYZ(a.pure)
 
-# --- Create executable ---
+# --- Create main executable ---
 exe = EXE(
     pyz,
     a.scripts,
@@ -66,7 +74,7 @@ exe = EXE(
     bundle_identifier="com.webtvmux.app",
 )
 
-# --- Bundle into macOS .app ---
+# --- Bundle into .app structure ---
 coll = BUNDLE(
     exe,
     name=f"{app_name}.app",
@@ -82,11 +90,11 @@ coll = BUNDLE(
     },
 )
 
-# --- Create DMG automatically ---
+# --- Auto-create DMG package ---
 dmg_path = os.path.join("dist", f"{app_name}.dmg")
 
 def create_dmg():
-    print(f"\n📦 Creating DMG at {dmg_path}\n")
+    print(f"📦 Creating DMG at {dmg_path}")
     os.system(
         f"hdiutil create -volname {app_name} "
         f"-srcfolder dist/{app_name}.app -ov -format UDZO {dmg_path}"
