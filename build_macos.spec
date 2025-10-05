@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final CI-Safe Build)
+# build_macos.spec — WebTvMux (Final Verified Stable Build)
 # ===========================================
 
 import os
@@ -55,8 +55,9 @@ print("\n📦 Files to include:")
 for f, dest in datas:
     print(f"  - {f} → {dest}/")
 
-# --- Ensure paths exist before analysis (critical for CI) ---
+# --- Ensure build directories exist (for GitHub Actions safety) ---
 os.makedirs(os.path.join(root, "build"), exist_ok=True)
+os.makedirs(os.path.join(root, "build", "build_macos"), exist_ok=True)  # critical fix
 os.makedirs(os.path.join(root, "dist"), exist_ok=True)
 
 # --- Main Analysis ---
@@ -68,14 +69,12 @@ a = Analysis(
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
-    distpath=os.path.join(root, "dist"),   # ✅ explicit output path
-    workpath=os.path.join(root, "build"),  # ✅ explicit work path
 )
 
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Filter out any invalid datas before COLLECT (critical fix) ---
+# --- Filter out any invalid datas before COLLECT (safety fix) ---
 valid_datas = [(src, dest) for src, dest in a.datas if os.path.isfile(src)]
 
 coll = COLLECT(
