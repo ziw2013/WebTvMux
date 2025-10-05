@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Stable macOS Build)
+# build_macos.spec — WebTvMux (No-BUNDLE Stable Build)
 # ===========================================
 
 import os
@@ -34,22 +34,22 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Prepare build environment safely ---
+# --- Clean old builds ---
 for d in ["build", "dist"]:
     if os.path.exists(d):
         print(f"🧹 Removing old {d}/ folder...")
         shutil.rmtree(d, ignore_errors=True)
 os.makedirs("dist", exist_ok=True)
-os.makedirs("build/build_macos", exist_ok=True)  # ✅ Critical fix
+os.makedirs("build/build_macos", exist_ok=True)
 
 root = os.path.abspath(".")
 
-# --- Analysis (no datas to avoid recursion) ---
+# --- Analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
     binaries=[],
-    datas=[],  # handled later
+    datas=[],  # handle manually
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
@@ -57,10 +57,21 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
-bundle = BUNDLE(exe, name=app_name)
+
+# --- NOTE: we remove BUNDLE() entirely ---
+# This ensures dist/WebTvMux is a directory tree, not a file
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name=app_name,
+)
 
 # ===================================================================
-# Post-build: copy bin/config, chmod, and build DMG
+# Post-build: copy bin/config, chmod, and create DMG
 # ===================================================================
 def post_build():
     src_folder = os.path.join("dist", app_name)
@@ -75,7 +86,7 @@ def post_build():
         print(f"❌ Build folder not found: {src_folder}")
         return
 
-    # --- Copy bin and config folders ---
+    # --- Copy bin and config ---
     for folder in ["bin", "config"]:
         if os.path.isdir(folder):
             dest = os.path.join(src_folder, folder)
@@ -86,7 +97,7 @@ def post_build():
         else:
             print(f"⚠️ Missing local folder: {folder}")
 
-    # --- Create .app bundle ---
+    # --- Create .app bundle manually ---
     print(f"\n📦 Creating .app bundle at {app_path}")
     os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
     os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
@@ -116,7 +127,7 @@ def post_build():
             os.chmod(os.path.join(bin_path, file), 0o755)
             print(f"  ✅ chmod +x {file}")
     else:
-        print(f"⚠️ bin folder not found inside .app")
+        print("⚠️ bin folder not found inside .app")
 
     # --- Create DMG ---
     dmg_path = os.path.join("dist", f"{app_name}.dmg")
