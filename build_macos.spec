@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (macOS Unsigned, Stable Build)
+# build_macos.spec — WebTvMux (macOS Unsigned Final)
 # ===========================================
 
 import os
@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_submodules
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Collect necessary PySide6 modules ---
+# --- Collect PySide6 modules (only essentials) ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
@@ -21,7 +21,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Exclude unused heavy Qt/Python modules ---
+# --- Exclude unused / heavy modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
@@ -33,7 +33,7 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Gather all absolute resource paths ---
+# --- Gather all absolute resource paths (bin + config) ---
 root = os.path.abspath(".")
 bin_dir = os.path.join(root, "bin")
 config_dir = os.path.join(root, "config")
@@ -43,9 +43,9 @@ for folder, dest in [(bin_dir, "bin"), (config_dir, "config")]:
     if os.path.isdir(folder):
         for f in glob.glob(os.path.join(folder, "*")):
             if os.path.isfile(f):
-                datas.append((f, dest))
+                datas.append((os.path.abspath(f), dest))
 
-print("\n📦 Resources included in build:")
+print("\n📦 Including the following resources:")
 for src, dest in datas:
     print(f"  - {src} → {dest}/")
 
@@ -61,10 +61,10 @@ a = Analysis(
     noarchive=False,
 )
 
-# --- Package Python bytecode ---
+# --- Bundle Python code ---
 pyz = PYZ(a.pure)
 
-# --- Create main executable ---
+# --- Build executable ---
 exe = EXE(
     pyz,
     a.scripts,
@@ -74,7 +74,7 @@ exe = EXE(
     bundle_identifier="com.webtvmux.app",
 )
 
-# --- Bundle into .app structure ---
+# --- Bundle into .app ---
 coll = BUNDLE(
     exe,
     name=f"{app_name}.app",
@@ -90,7 +90,7 @@ coll = BUNDLE(
     },
 )
 
-# --- Auto-create DMG package ---
+# --- Automatically create DMG after .app build ---
 dmg_path = os.path.join("dist", f"{app_name}.dmg")
 
 def create_dmg():
