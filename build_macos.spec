@@ -53,7 +53,6 @@ exe = EXE(
     a.scripts,
     name=app_name,
     console=False,
-    icon=os.path.abspath("icon.icns"),  # macOS icon
     bundle_identifier="com.webtvmux.app",
 )
 
