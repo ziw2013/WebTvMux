@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (macOS Unsigned Build)
+# build_macos.spec — WebTvMux (macOS Unsigned Stable Build)
 # ===========================================
 
 import os
@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_submodules
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Collect only necessary PySide6 modules ---
+# --- Collect PySide6 modules safely ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
@@ -21,7 +21,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Excluded heavy/unused modules ---
+# --- Exclude unused or heavy modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
@@ -33,15 +33,15 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Gather data files from bin/ and config/ dynamically ---
-bin_files = [(f, "bin") for f in glob.glob("bin/*")]
-config_files = [(f, "config") for f in glob.glob("config/*")]
+# --- Gather all resource files (absolute paths) ---
+bin_files = [(os.path.abspath(f), "bin") for f in glob.glob("bin/*") if os.path.isfile(f)]
+config_files = [(os.path.abspath(f), "config") for f in glob.glob("config/*") if os.path.isfile(f)]
 
-print("📦 Including resources:")
+print("\n📦 Files to include in build:")
 for f, dest in bin_files + config_files:
     print(f"  - {f} → {dest}/")
 
-# --- Main analysis ---
+# --- Analysis stage ---
 a = Analysis(
     [entry_script],
     pathex=[],
@@ -53,7 +53,7 @@ a = Analysis(
     noarchive=False,
 )
 
-# --- Bundle Python bytecode ---
+# --- Bundle pure Python modules ---
 pyz = PYZ(a.pure)
 
 # --- Create executable ---
@@ -66,7 +66,7 @@ exe = EXE(
     bundle_identifier="com.webtvmux.app",
 )
 
-# --- Bundle into .app ---
+# --- Bundle into macOS .app ---
 coll = BUNDLE(
     exe,
     name=f"{app_name}.app",
@@ -82,11 +82,11 @@ coll = BUNDLE(
     },
 )
 
-# --- Create DMG after build ---
+# --- Create DMG automatically ---
 dmg_path = os.path.join("dist", f"{app_name}.dmg")
 
 def create_dmg():
-    print(f"📦 Creating DMG at {dmg_path}")
+    print(f"\n📦 Creating DMG at {dmg_path}\n")
     os.system(
         f"hdiutil create -volname {app_name} "
         f"-srcfolder dist/{app_name}.app -ov -format UDZO {dmg_path}"
