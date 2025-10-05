@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final, Fully Stable Build)
+# build_macos.spec — WebTvMux (Final Stable Build)
 # ===========================================
 
 import os
@@ -57,7 +57,7 @@ for f, dest in datas:
 
 # --- Ensure build directories exist (for GitHub Actions safety) ---
 os.makedirs(os.path.join(root, "build"), exist_ok=True)
-os.makedirs(os.path.join(root, "build", "build_macos"), exist_ok=True)  # critical fix
+os.makedirs(os.path.join(root, "build", "build_macos"), exist_ok=True)  # ✅ critical fix
 os.makedirs(os.path.join(root, "dist"), exist_ok=True)
 
 # --- Main Analysis ---
@@ -74,13 +74,14 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Filter out any invalid datas before COLLECT (3-tuple safe fix) ---
+# --- Filter out invalid datas (PyInstaller 3-tuple safe fix) ---
 valid_datas = []
 for item in a.datas:
     src = item[0]
     dest = item[1]
+    typecode = item[2] if len(item) > 2 else "DATA"
     if os.path.isfile(src):
-        valid_datas.append((src, dest))
+        valid_datas.append((src, dest, typecode))
 
 coll = COLLECT(
     exe,
@@ -93,14 +94,14 @@ coll = COLLECT(
 )
 
 # ===================================================================
-# Post-build: Create .app bundle and DMG *after* PyInstaller finishes
+# Post-build: Create .app bundle and DMG after PyInstaller finishes
 # ===================================================================
 
 def create_bundle():
     app_path = os.path.join("dist", f"{app_name}.app")
     src_folder = os.path.join("dist", app_name)
 
-    # Wait until PyInstaller actually produces dist/WebTvMux
+    # Wait until PyInstaller produces dist/WebTvMux
     for _ in range(30):
         if os.path.exists(src_folder):
             break
