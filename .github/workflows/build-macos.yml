@@ -13,15 +13,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- Ensure binaries and configs are present ---
+      # --- Ensure bin and config folders exist ---
       - name: Verify bin and config folders
         run: |
           echo "🧩 Checking local binaries and configs..."
           ls -lh bin/ || (echo "❌ bin folder missing!" && exit 1)
           ls -lh config/ || (echo "❌ config folder missing!" && exit 1)
 
-          # Make sure binaries are executable
-          chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp
+          # Normalize yt-dlp binary name
+          if [ -f "bin/yt-dlp_macos" ]; then
+            mv bin/yt-dlp_macos bin/yt-dlp
+            echo "Renamed yt-dlp_macos → yt-dlp"
+          fi
+
+          # Ensure executables
+          chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp || true
           echo "✅ All binaries marked executable."
 
       - name: Set up Python
@@ -40,35 +46,51 @@ jobs:
           pyinstaller build_macos.spec
           echo "✅ Build completed."
 
-      # --- Verify that build outputs are valid ---
-      - name: Verify artifact contents
+      # --- Validate output files ---
+      - name: Verify packaged app contents
         run: |
-          echo "🔍 Verifying build contents..."
+          APP_PATH="dist/WebTvMux.app/Contents/MacOS"
+          echo "🔍 Checking packaged files inside .app..."
+
+          REQUIRED_FILES=(
+            "$APP_PATH/bin/ffmpeg"
+            "$APP_PATH/bin/ffprobe"
+            "$APP_PATH/bin/yt-dlp"
+            "$APP_PATH/config/languages.json"
+          )
+
+          MISSING=0
+          for FILE in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$FILE" ]; then
+              echo "❌ Missing: $FILE"
+              MISSING=1
+            else
+              echo "✅ Found: $FILE"
+            fi
+          done
+
+          if [ "$MISSING" -ne 0 ]; then
+            echo "❌ One or more required files missing from .app!"
+            exit 1
+          fi
+
           echo ""
-          echo "==> .app structure:"
+          echo "==> App structure summary:"
           find dist/WebTvMux.app -maxdepth 4 -type f | sort
-          echo ""
-          echo "==> Embedded binaries:"
-          find dist/WebTvMux.app/Contents/MacOS/bin -type f -exec ls -lh {} \; || echo "⚠️ bin folder missing!"
-          echo ""
-          echo "==> Config files:"
-          find dist/WebTvMux.app/Contents/MacOS/config -type f -exec ls -lh {} \; || echo "⚠️ config folder missing!"
           echo ""
           echo "==> Bundle size:"
           du -sh dist/WebTvMux.app || true
           echo ""
           echo "==> DMG info:"
           ls -lh dist/WebTvMux.dmg || echo "⚠️ DMG not found!"
-          echo ""
-          echo "✅ Verification complete."
 
-      # --- Optional sanity check: fail if .app is too small (<50 MB) ---
+      # --- Optional safety check: ensure app size > 50MB ---
       - name: Validate app size
         run: |
           APP_SIZE=$(du -sm dist/WebTvMux.app | cut -f1)
           echo "App size: ${APP_SIZE} MB"
           if [ "$APP_SIZE" -lt 50 ]; then
-            echo "❌ App size too small — likely missing ffmpeg/yt-dlp!"
+            echo "❌ App size too small — missing binaries?"
             exit 1
           fi
           echo "✅ App size validation passed."
