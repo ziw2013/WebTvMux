@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Stable Build)
+# build_macos.spec — WebTvMux (Final Production-Safe Build)
 # ===========================================
 
 import os
@@ -34,6 +34,12 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
+# --- Clean old build artifacts (critical fix) ---
+for d in ["build", "dist"]:
+    if os.path.exists(d):
+        print(f"🧹 Removing old {d}/ folder...")
+        os.system(f"rm -rf {d}")
+
 # --- Gather data files (bin + config) ---
 root = os.path.abspath(".")
 datas = []
@@ -57,17 +63,21 @@ a = Analysis(
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
+    distpath=os.path.join(root, "dist"),   # ✅ explicit output path
+    workpath=os.path.join(root, "build"),  # ✅ explicit work path
 )
 
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Collect all build outputs ---
+# --- Filter out any invalid datas before COLLECT (critical fix) ---
+valid_datas = [(src, dest) for src, dest in a.datas if os.path.isfile(src)]
+
 coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
-    a.datas,
+    valid_datas,
     strip=False,
     upx=False,
     name=app_name,
@@ -129,6 +139,6 @@ def create_bundle():
     except Exception as e:
         print(f"⚠️ DMG creation failed: {e}")
 
-# Only run bundle creation after build, not during PyInstaller import
+# ✅ Only run bundle creation after build, not during PyInstaller import
 if os.environ.get("PYINSTALLER_RUNNING") != "true":
     create_bundle()
