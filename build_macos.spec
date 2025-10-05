@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Verified Build)
+# build_macos.spec — WebTvMux (Final Stable Executable Build)
 # ===========================================
 
 import os
@@ -10,7 +10,7 @@ from PyInstaller.utils.hooks import collect_submodules
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Collect minimal PySide6 modules ---
+# --- Collect only minimal PySide6 modules ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
@@ -22,7 +22,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Exclude unused / heavy modules ---
+# --- Exclude unused or heavy modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
@@ -34,33 +34,39 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Clean old build artifacts safely ---
+# --- Clean build directories ---
 for d in ["build", "dist"]:
     if os.path.exists(d):
         print(f"🧹 Removing old {d}/ folder...")
         os.system(f"rm -rf {d}")
     os.makedirs(d, exist_ok=True)
 
-# --- Gather data files (bin + config) ---
+# --- Gather data files from bin/ and config/ ---
 root = os.path.abspath(".")
 datas = []
-for folder, dest in [("bin", "bin"), ("config", "config")]:
-    folder_path = os.path.join(root, folder)
-    if os.path.isdir(folder_path):
-        for f in glob.glob(os.path.join(folder_path, "*")):
-            if os.path.isfile(f):
-                datas.append((os.path.abspath(f), dest))
+
+expected_files = [
+    ("bin/ffmpeg", "bin"),
+    ("bin/ffprobe", "bin"),
+    ("bin/yt-dlp", "bin"),
+    ("config/languages.json", "config"),
+]
+
+for src, dest in expected_files:
+    abs_path = os.path.abspath(src)
+    if os.path.isfile(abs_path):
+        datas.append((abs_path, dest))
+    else:
+        print(f"⚠️ Missing expected file: {src}")
 
 print("\n📦 Files to include:")
 for f, dest in datas:
     print(f"  - {f} → {dest}/")
 
-# --- Ensure build directories exist (for GitHub Actions safety) ---
-os.makedirs(os.path.join(root, "build"), exist_ok=True)
-os.makedirs(os.path.join(root, "build", "build_macos"), exist_ok=True)  # critical fix
-os.makedirs(os.path.join(root, "dist"), exist_ok=True)
+# --- Prepare build directories ---
+os.makedirs(os.path.join(root, "build", "build_macos"), exist_ok=True)
 
-# --- Main Analysis ---
+# --- Main analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
@@ -74,28 +80,20 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Filter out invalid or recursive datas (Final Safe Fix) ---
+# --- Collect valid resources ---
 valid_datas = []
 for item in a.datas:
     src = item[0]
     dest = item[1]
     typecode = item[2] if len(item) > 2 else "DATA"
 
-    # ✅ Skip if nonexistent or a directory
     if not os.path.exists(src) or not os.path.isfile(src):
         continue
-
-    # ✅ Skip anything inside build/ or dist/ (prevents recursion)
     if "/dist/" in src or "/build/" in src:
         continue
-
-    # ✅ Skip anything referencing WebTvMux output folder itself
-    if src.endswith("WebTvMux") or "dist/WebTvMux" in src:
-        continue
-
     valid_datas.append((src, dest, typecode))
 
-print("\n✅ Final data entries included in COLLECT:")
+print("\n✅ Final data entries included:")
 for src, dest, _ in valid_datas:
     print(f"  - {src} → {dest}")
 
@@ -110,14 +108,14 @@ coll = COLLECT(
 )
 
 # ===================================================================
-# Post-build: Create .app bundle and DMG *after* PyInstaller finishes
+# Post-build: Create .app bundle and DMG
 # ===================================================================
 
 def create_bundle():
     app_path = os.path.join("dist", f"{app_name}.app")
     src_folder = os.path.join("dist", app_name)
 
-    # Wait until PyInstaller actually produces dist/WebTvMux
+    # Wait until build completes (important in CI)
     for _ in range(30):
         if os.path.exists(src_folder):
             break
@@ -131,10 +129,10 @@ def create_bundle():
     os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
     os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
 
-    # Copy all collected files into Contents/MacOS
+    # Copy PyInstaller output to .app bundle
     os.system(f"cp -R '{src_folder}/' '{app_path}/Contents/MacOS/'")
 
-    # --- Generate Info.plist ---
+    # --- Create Info.plist ---
     info_plist = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -150,11 +148,24 @@ def create_bundle():
     plist_path = os.path.join(app_path, "Contents", "Info.plist")
     with open(plist_path, "w") as f:
         f.write(info_plist)
-
     print(f"✅ Info.plist written: {plist_path}")
-    print("✅ .app bundle created successfully.")
 
-    # --- Create DMG safely ---
+    # --- Ensure bin folder exists and make all binaries executable ---
+    bin_path = os.path.join(app_path, "Contents", "MacOS", "bin")
+    if os.path.isdir(bin_path):
+        print(f"🔧 Setting +x permissions for all binaries in: {bin_path}")
+        for root, _, files in os.walk(bin_path):
+            for file in files:
+                full_path = os.path.join(root, file)
+                try:
+                    os.chmod(full_path, 0o755)
+                    print(f"  ✅ chmod +x {file}")
+                except Exception as e:
+                    print(f"  ⚠️ Could not chmod {file}: {e}")
+    else:
+        print(f"⚠️ bin folder not found in app: {bin_path}")
+
+    # --- Create DMG ---
     dmg_path = os.path.join("dist", f"{app_name}.dmg")
     try:
         os.system(
@@ -165,6 +176,6 @@ def create_bundle():
     except Exception as e:
         print(f"⚠️ DMG creation failed: {e}")
 
-# ✅ Only run bundle creation after build, not during PyInstaller import
+# --- Only run post-build after PyInstaller completes ---
 if os.environ.get("PYINSTALLER_RUNNING") != "true":
     create_bundle()

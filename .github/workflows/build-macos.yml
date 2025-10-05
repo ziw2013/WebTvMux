@@ -1,4 +1,4 @@
-name: Build macOS App (Unsigned Final Verified)
+name: Build macOS App (Unsigned Final)
 
 on:
   push:
@@ -13,32 +13,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Prepare bin and config
+      # --- Ensure binaries and configs are present ---
+      - name: Verify bin and config folders
         run: |
-          mkdir -p bin config
-          echo "⬇️ Downloading ffmpeg, ffprobe, and yt-dlp for macOS..."
+          echo "🧩 Checking local binaries and configs..."
+          ls -lh bin/ || (echo "❌ bin folder missing!" && exit 1)
+          ls -lh config/ || (echo "❌ config folder missing!" && exit 1)
 
-          # ✅ Use Evermeet.cx static universal binaries (ffmpeg & ffprobe)
-          curl -L -o bin/ffmpeg.zip https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip
-          curl -L -o bin/ffprobe.zip https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip
-          unzip -o bin/ffmpeg.zip -d bin/
-          unzip -o bin/ffprobe.zip -d bin/
-          rm bin/*.zip
-          chmod +x bin/ffmpeg bin/ffprobe
-
-          # ✅ yt-dlp (universal macOS binary)
-          curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
-          chmod +x bin/yt-dlp
-
-          # ✅ Add config if missing
-          if [ ! -f "config/languages.json" ]; then
-            echo '{}' > config/languages.json
-          fi
-
-          echo "✅ Download complete. bin/:"
-          find bin -type f -exec ls -lh {} \;
-          echo "✅ config/:"
-          find config -type f -exec ls -lh {} \;
+          # Make sure binaries are executable
+          chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp
+          echo "✅ All binaries marked executable."
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,33 +34,46 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      - name: Run PyInstaller build
+      - name: Build macOS app
         run: |
-          echo "🚀 Building macOS app..."
+          echo "🚀 Building unsigned macOS app..."
           pyinstaller build_macos.spec
           echo "✅ Build completed."
 
+      # --- Verify that build outputs are valid ---
       - name: Verify artifact contents
         run: |
-          echo "🔍 Verifying .app and .dmg contents..."
+          echo "🔍 Verifying build contents..."
           echo ""
-          echo "==> .app bundle structure:"
+          echo "==> .app structure:"
           find dist/WebTvMux.app -maxdepth 4 -type f | sort
-          echo ""
-          echo "==> Bundle size summary:"
-          du -sh dist/WebTvMux.app || true
-          echo ""
-          echo "==> DMG file info:"
-          ls -lh dist/WebTvMux.dmg || echo "⚠️ DMG not found!"
           echo ""
           echo "==> Embedded binaries:"
           find dist/WebTvMux.app/Contents/MacOS/bin -type f -exec ls -lh {} \; || echo "⚠️ bin folder missing!"
           echo ""
           echo "==> Config files:"
-          find dist/WebTvMux.app/Contents/MacOS/config -type f -exec cat {} \; || echo "⚠️ config folder missing!"
+          find dist/WebTvMux.app/Contents/MacOS/config -type f -exec ls -lh {} \; || echo "⚠️ config folder missing!"
+          echo ""
+          echo "==> Bundle size:"
+          du -sh dist/WebTvMux.app || true
+          echo ""
+          echo "==> DMG info:"
+          ls -lh dist/WebTvMux.dmg || echo "⚠️ DMG not found!"
           echo ""
           echo "✅ Verification complete."
 
+      # --- Optional sanity check: fail if .app is too small (<50 MB) ---
+      - name: Validate app size
+        run: |
+          APP_SIZE=$(du -sm dist/WebTvMux.app | cut -f1)
+          echo "App size: ${APP_SIZE} MB"
+          if [ "$APP_SIZE" -lt 50 ]; then
+            echo "❌ App size too small — likely missing ffmpeg/yt-dlp!"
+            exit 1
+          fi
+          echo "✅ App size validation passed."
+
+      # --- Upload artifacts for download ---
       - name: Upload macOS build artifacts
         uses: actions/upload-artifact@v4
         with:
