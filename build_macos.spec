@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Verified Stable Build)
+# build_macos.spec — WebTvMux (Final, Fully Stable Build)
 # ===========================================
 
 import os
@@ -74,8 +74,13 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Filter out any invalid datas before COLLECT (safety fix) ---
-valid_datas = [(src, dest) for src, dest in a.datas if os.path.isfile(src)]
+# --- Filter out any invalid datas before COLLECT (3-tuple safe fix) ---
+valid_datas = []
+for item in a.datas:
+    src = item[0]
+    dest = item[1]
+    if os.path.isfile(src):
+        valid_datas.append((src, dest))
 
 coll = COLLECT(
     exe,
