@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Fixed Inclusion)
+# build_macos.spec — WebTvMux (Final Stable Build)
 # ===========================================
 
 import os
@@ -21,7 +21,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Excluded modules ---
+# --- Exclude unused / heavy modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
@@ -33,10 +33,9 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Gather data files ---
+# --- Gather data files (bin + config) ---
 root = os.path.abspath(".")
 datas = []
-
 for folder, dest in [("bin", "bin"), ("config", "config")]:
     folder_path = os.path.join(root, folder)
     if os.path.isdir(folder_path):
@@ -48,7 +47,7 @@ print("\n📦 Files to include:")
 for f, dest in datas:
     print(f"  - {f} → {dest}/")
 
-# --- Analysis ---
+# --- Main Analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
@@ -60,17 +59,9 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure)
+exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Executable ---
-exe = EXE(
-    pyz,
-    a.scripts,
-    name=app_name,
-    console=False,
-    icon=os.path.abspath("icon.icns") if os.path.exists("icon.icns") else None,
-)
-
-# --- Collect everything into one folder ---
+# --- Collect all build outputs ---
 coll = COLLECT(
     exe,
     a.binaries,
@@ -81,20 +72,23 @@ coll = COLLECT(
     name=app_name,
 )
 
-# --- Now build macOS .app from collected folder ---
-app_path = os.path.join("dist", f"{app_name}.app")
-src_folder = os.path.join("dist", app_name)
+# ===================================================================
+# Post-build phase: Create .app bundle and DMG *after* PyInstaller finishes
+# ===================================================================
+if __name__ == "__main__":
+    app_path = os.path.join("dist", f"{app_name}.app")
+    src_folder = os.path.join("dist", app_name)
 
-def create_bundle():
-    print(f"\n📦 Creating .app bundle at {app_path}")
-    os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
-    os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
+    def create_bundle():
+        print(f"\n📦 Creating .app bundle at {app_path}")
+        os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
+        os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
 
-    # Move collected files into Contents/MacOS
-    os.system(f"cp -R '{src_folder}/' '{app_path}/Contents/MacOS/'")
+        # Copy all collected files into Contents/MacOS
+        os.system(f"cp -R '{src_folder}/' '{app_path}/Contents/MacOS/'")
 
-    # Create basic Info.plist
-    info_plist = f'''<?xml version="1.0" encoding="UTF-8"?>
+        # --- Generate Info.plist ---
+        info_plist = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -106,17 +100,20 @@ def create_bundle():
     <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>'''
-    with open(os.path.join(app_path, "Contents", "Info.plist"), "w") as f:
-        f.write(info_plist)
+        with open(os.path.join(app_path, "Contents", "Info.plist"), "w") as f:
+            f.write(info_plist)
 
-    print("✅ .app bundle created successfully.")
+        print("✅ .app bundle created successfully.")
 
-    # --- Create DMG ---
-    dmg_path = os.path.join("dist", f"{app_name}.dmg")
-    os.system(
-        f"hdiutil create -volname {app_name} "
-        f"-srcfolder '{app_path}' -ov -format UDZO '{dmg_path}'"
-    )
-    print(f"✅ DMG created: {dmg_path}")
+        # --- Create DMG safely ---
+        dmg_path = os.path.join("dist", f"{app_name}.dmg")
+        try:
+            os.system(
+                f"hdiutil create -volname {app_name} "
+                f"-srcfolder '{app_path}' -ov -format UDZO '{dmg_path}'"
+            )
+            print(f"✅ DMG created: {dmg_path}")
+        except Exception as e:
+            print(f"⚠️ DMG creation failed: {e}")
 
-create_bundle()
+    create_bundle()
