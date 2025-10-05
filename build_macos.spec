@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Production-Safe Build)
+# build_macos.spec — WebTvMux (Final CI-Safe Build)
 # ===========================================
 
 import os
@@ -34,11 +34,12 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Clean old build artifacts (critical fix) ---
+# --- Clean old build artifacts safely ---
 for d in ["build", "dist"]:
     if os.path.exists(d):
         print(f"🧹 Removing old {d}/ folder...")
         os.system(f"rm -rf {d}")
+    os.makedirs(d, exist_ok=True)
 
 # --- Gather data files (bin + config) ---
 root = os.path.abspath(".")
@@ -53,6 +54,10 @@ for folder, dest in [("bin", "bin"), ("config", "config")]:
 print("\n📦 Files to include:")
 for f, dest in datas:
     print(f"  - {f} → {dest}/")
+
+# --- Ensure paths exist before analysis (critical for CI) ---
+os.makedirs(os.path.join(root, "build"), exist_ok=True)
+os.makedirs(os.path.join(root, "dist"), exist_ok=True)
 
 # --- Main Analysis ---
 a = Analysis(
