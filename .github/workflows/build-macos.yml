@@ -10,36 +10,37 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      # --- Checkout source code ---
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # --- Setup Python environment ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # --- Install dependencies ---
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      # --- Prepare resources (binaries + config) ---
+      # --- Prepare binaries and config ---
       - name: Prepare bin and config folders
         run: |
           mkdir -p bin config
 
-          # If ffmpeg not already in repo, download it
+          # Download macOS universal binaries if not already present
           if [ ! -f "bin/ffmpeg" ]; then
             echo "⬇️ Downloading ffmpeg, ffprobe, and yt-dlp for macOS..."
-            curl -L -o bin/ffmpeg.zip https://evermeet.cx/ffmpeg/ffmpeg-7.0.zip
-            curl -L -o bin/ffprobe.zip https://evermeet.cx/ffmpeg/ffprobe-7.0.zip
+            curl -L -o bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-mac
+            curl -L -o bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffprobe-mac
             curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
-            unzip -o bin/ffmpeg.zip -d bin/
-            unzip -o bin/ffprobe.zip -d bin/
             chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp
           fi
 
-          # If languages.json missing, add placeholder
+          # Add default config if not present
           if [ ! -f "config/languages.json" ]; then
             echo "{}" > config/languages.json
           fi
@@ -54,15 +55,15 @@ jobs:
           echo "✅ Build finished."
           ls dist/
 
-      # --- Verify embedded resources inside app bundle ---
+      # --- Verify resources inside .app ---
       - name: Verify embedded resources
         run: |
-          echo "🔍 Checking embedded files..."
+          echo "🔍 Checking embedded binaries:"
           ls dist/WebTvMux.app/Contents/MacOS/bin
           echo "📜 languages.json content:"
           cat dist/WebTvMux.app/Contents/MacOS/config/languages.json
 
-      # --- Upload artifacts ---
+      # --- Upload build artifacts ---
       - name: Upload macOS build artifacts
         uses: actions/upload-artifact@v4
         with:
