@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (No-BUNDLE Stable Build)
+# build_macos.spec — WebTvMux (Final Non-Recursive macOS Build)
 # ===========================================
 
 import os
@@ -49,35 +49,29 @@ a = Analysis(
     [entry_script],
     pathex=[root],
     binaries=[],
-    datas=[],  # handle manually
+    datas=[],
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
 )
 
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, name=app_name, console=False)
-
-# --- NOTE: we remove BUNDLE() entirely ---
-# This ensures dist/WebTvMux is a directory tree, not a file
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
+exe = EXE(
+    pyz,
+    a.scripts,
     name=app_name,
+    console=False,
+    debug=False,
 )
 
 # ===================================================================
-# Post-build: copy bin/config, chmod, and create DMG
+# Manual bundle creation — replaces COLLECT entirely
 # ===================================================================
 def post_build():
     src_folder = os.path.join("dist", app_name)
     app_path = os.path.join("dist", f"{app_name}.app")
 
-    # Wait for build output
+    # Wait for PyInstaller output
     for _ in range(30):
         if os.path.exists(src_folder):
             break
@@ -86,7 +80,7 @@ def post_build():
         print(f"❌ Build folder not found: {src_folder}")
         return
 
-    # --- Copy bin and config ---
+    # --- Copy bin/config ---
     for folder in ["bin", "config"]:
         if os.path.isdir(folder):
             dest = os.path.join(src_folder, folder)
@@ -97,7 +91,7 @@ def post_build():
         else:
             print(f"⚠️ Missing local folder: {folder}")
 
-    # --- Create .app bundle manually ---
+    # --- Create .app bundle ---
     print(f"\n📦 Creating .app bundle at {app_path}")
     os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
     os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
@@ -120,14 +114,12 @@ def post_build():
         f.write(plist)
     print(f"✅ Info.plist written: {plist_path}")
 
-    # --- Make binaries executable ---
+    # --- chmod bin ---
     bin_path = os.path.join(app_path, "Contents", "MacOS", "bin")
     if os.path.isdir(bin_path):
         for file in os.listdir(bin_path):
             os.chmod(os.path.join(bin_path, file), 0o755)
             print(f"  ✅ chmod +x {file}")
-    else:
-        print("⚠️ bin folder not found inside .app")
 
     # --- Create DMG ---
     dmg_path = os.path.join("dist", f"{app_name}.dmg")
