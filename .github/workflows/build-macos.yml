@@ -1,4 +1,4 @@
-name: Build macOS App (Unsigned Final)
+name: Build macOS App (Final Fixed)
 
 on:
   push:
@@ -10,65 +10,46 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # --- 1. Checkout repo ---
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- 2. Prepare bin/config BEFORE installing PyInstaller ---
+      # Prepare bin/config FIRST
       - name: Prepare bin and config
         run: |
           mkdir -p bin config
-          echo "⬇️ Downloading ffmpeg, ffprobe, and yt-dlp for macOS..."
+          echo "⬇️ Downloading ffmpeg, ffprobe, yt-dlp..."
           curl -L -o bin/ffmpeg https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-mac
           curl -L -o bin/ffprobe https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffprobe-mac
           curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
           chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp
+          echo '{}' > config/languages.json
+          echo "✅ Downloaded files:"
+          find bin config -type f -exec ls -lh {} \;
 
-          if [ ! -f "config/languages.json" ]; then
-            echo '{}' > config/languages.json
-          fi
-
-          echo "✅ bin and config prepared:"
-          ls -lh bin
-          ls -lh config
-
-      # --- 3. Set up Python ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # --- 4. Install dependencies ---
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      # --- 5. Pre-build check ---
-      - name: Verify bin/config before build
+      - name: Build macOS app and dmg
         run: |
-          echo "🔍 Pre-build verification:"
-          find bin -type f -exec ls -lh {} \;
-          find config -type f -exec ls -lh {} \;
-
-      # --- 6. Build app ---
-      - name: Build macOS .app and .dmg
-        run: |
-          echo "🚀 Running PyInstaller..."
+          echo "🚀 Starting PyInstaller..."
           pyinstaller build_macos.spec
-          echo "✅ Build completed."
-          du -sh dist/WebTvMux.app || true
-          ls -lh dist/
+          echo "✅ Build complete."
+          du -sh dist/* || true
 
-      # --- 7. Verify embedded content ---
       - name: Verify inside .app
         run: |
-          echo "🔍 Inspecting .app contents..."
-          find dist/WebTvMux.app/Contents/MacOS -maxdepth 2 -type f || echo "⚠️ Missing bin/config in .app"
+          echo "🔍 Inspecting .app structure:"
+          find dist/WebTvMux.app -maxdepth 3 -type f | sort
           du -sh dist/WebTvMux.app dist/WebTvMux.dmg || true
 
-      # --- 8. Upload both .app and .dmg for inspection ---
-      - name: Upload macOS build artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: WebTvMux-macos-build

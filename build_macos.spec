@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (macOS Unsigned Final)
+# build_macos.spec — WebTvMux (Final Fixed Inclusion)
 # ===========================================
 
 import os
@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_submodules
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Collect PySide6 modules (only essentials) ---
+# --- Collect minimal PySide6 modules ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
@@ -21,7 +21,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Exclude unused / heavy modules ---
+# --- Excluded modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
@@ -33,23 +33,22 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Gather all absolute resource paths (bin + config) ---
+# --- Gather data files ---
 root = os.path.abspath(".")
-bin_dir = os.path.join(root, "bin")
-config_dir = os.path.join(root, "config")
-
 datas = []
-for folder, dest in [(bin_dir, "bin"), (config_dir, "config")]:
-    if os.path.isdir(folder):
-        for f in glob.glob(os.path.join(folder, "*")):
+
+for folder, dest in [("bin", "bin"), ("config", "config")]:
+    folder_path = os.path.join(root, folder)
+    if os.path.isdir(folder_path):
+        for f in glob.glob(os.path.join(folder_path, "*")):
             if os.path.isfile(f):
                 datas.append((os.path.abspath(f), dest))
 
-print("\n📦 Including the following resources:")
-for src, dest in datas:
-    print(f"  - {src} → {dest}/")
+print("\n📦 Files to include:")
+for f, dest in datas:
+    print(f"  - {f} → {dest}/")
 
-# --- Main analysis ---
+# --- Analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
@@ -57,51 +56,67 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
-    hookspath=[],
     noarchive=False,
 )
 
-# --- Bundle Python code ---
 pyz = PYZ(a.pure)
 
-# --- Build executable ---
+# --- Executable ---
 exe = EXE(
     pyz,
     a.scripts,
     name=app_name,
     console=False,
     icon=os.path.abspath("icon.icns") if os.path.exists("icon.icns") else None,
-    bundle_identifier="com.webtvmux.app",
 )
 
-# --- Bundle into .app ---
-coll = BUNDLE(
+# --- Collect everything into one folder ---
+coll = COLLECT(
     exe,
-    name=f"{app_name}.app",
-    icon=os.path.abspath("icon.icns") if os.path.exists("icon.icns") else None,
-    bundle_identifier="com.webtvmux.app",
-    info_plist={
-        "CFBundleName": app_name,
-        "CFBundleDisplayName": app_name,
-        "CFBundleVersion": "1.0.0",
-        "CFBundleShortVersionString": "1.0.0",
-        "LSMinimumSystemVersion": "10.14",
-        "NSHighResolutionCapable": True,
-    },
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name=app_name,
 )
 
-# --- Automatically create DMG after .app build ---
-dmg_path = os.path.join("dist", f"{app_name}.dmg")
+# --- Now build macOS .app from collected folder ---
+app_path = os.path.join("dist", f"{app_name}.app")
+src_folder = os.path.join("dist", app_name)
 
-def create_dmg():
-    print(f"📦 Creating DMG at {dmg_path}")
+def create_bundle():
+    print(f"\n📦 Creating .app bundle at {app_path}")
+    os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
+    os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
+
+    # Move collected files into Contents/MacOS
+    os.system(f"cp -R '{src_folder}/' '{app_path}/Contents/MacOS/'")
+
+    # Create basic Info.plist
+    info_plist = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>{app_name}</string>
+    <key>CFBundleDisplayName</key><string>{app_name}</string>
+    <key>CFBundleVersion</key><string>1.0.0</string>
+    <key>CFBundleShortVersionString</key><string>1.0.0</string>
+    <key>CFBundleIdentifier</key><string>com.webtvmux.app</string>
+    <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>'''
+    with open(os.path.join(app_path, "Contents", "Info.plist"), "w") as f:
+        f.write(info_plist)
+
+    print("✅ .app bundle created successfully.")
+
+    # --- Create DMG ---
+    dmg_path = os.path.join("dist", f"{app_name}.dmg")
     os.system(
         f"hdiutil create -volname {app_name} "
-        f"-srcfolder dist/{app_name}.app -ov -format UDZO {dmg_path}"
+        f"-srcfolder '{app_path}' -ov -format UDZO '{dmg_path}'"
     )
+    print(f"✅ DMG created: {dmg_path}")
 
-if os.path.exists(f"dist/{app_name}.app"):
-    create_dmg()
-    print("✅ DMG creation complete.")
-else:
-    print("⚠️ .app not found — PyInstaller may have failed.")
+create_bundle()
