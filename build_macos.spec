@@ -3,6 +3,7 @@
 # ===========================================
 
 import os
+import glob
 from PyInstaller.utils.hooks import collect_submodules
 
 app_name = "WebTvMux"
@@ -20,6 +21,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
+# --- Excluded heavy/unused modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "PIL.ImageTk", "PyQt5", "pytest",
@@ -31,22 +33,30 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
+# --- Gather data files from bin/ and config/ dynamically ---
+bin_files = [(f, "bin") for f in glob.glob("bin/*")]
+config_files = [(f, "config") for f in glob.glob("config/*")]
+
+print("📦 Including resources:")
+for f, dest in bin_files + config_files:
+    print(f"  - {f} → {dest}/")
+
+# --- Main analysis ---
 a = Analysis(
     [entry_script],
     pathex=[],
     binaries=[],
-    datas=[
-        ("bin/*", "bin"),           # include ffmpeg, ffprobe, yt-dlp
-        ("config/*", "config"),     # include languages.json
-    ],
+    datas=bin_files + config_files,
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     hookspath=[],
     noarchive=False,
 )
 
+# --- Bundle Python bytecode ---
 pyz = PYZ(a.pure)
 
+# --- Create executable ---
 exe = EXE(
     pyz,
     a.scripts,
@@ -56,6 +66,7 @@ exe = EXE(
     bundle_identifier="com.webtvmux.app",
 )
 
+# --- Bundle into .app ---
 coll = BUNDLE(
     exe,
     name=f"{app_name}.app",
@@ -76,7 +87,10 @@ dmg_path = os.path.join("dist", f"{app_name}.dmg")
 
 def create_dmg():
     print(f"📦 Creating DMG at {dmg_path}")
-    os.system(f"hdiutil create -volname {app_name} -srcfolder dist/{app_name}.app -ov -format UDZO {dmg_path}")
+    os.system(
+        f"hdiutil create -volname {app_name} "
+        f"-srcfolder dist/{app_name}.app -ov -format UDZO {dmg_path}"
+    )
 
 if os.path.exists(f"dist/{app_name}.app"):
     create_dmg()
