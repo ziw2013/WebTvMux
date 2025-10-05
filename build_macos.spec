@@ -4,6 +4,7 @@
 
 import os
 import glob
+import time
 from PyInstaller.utils.hooks import collect_submodules
 
 app_name = "WebTvMux"
@@ -73,22 +74,32 @@ coll = COLLECT(
 )
 
 # ===================================================================
-# Post-build phase: Create .app bundle and DMG *after* PyInstaller finishes
+# Post-build: Create .app bundle and DMG *after* PyInstaller finishes
 # ===================================================================
-if __name__ == "__main__":
+
+def create_bundle():
     app_path = os.path.join("dist", f"{app_name}.app")
     src_folder = os.path.join("dist", app_name)
 
-    def create_bundle():
-        print(f"\n📦 Creating .app bundle at {app_path}")
-        os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
-        os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
+    # Wait until PyInstaller actually produces dist/WebTvMux
+    for _ in range(30):
+        if os.path.exists(src_folder):
+            break
+        time.sleep(1)
 
-        # Copy all collected files into Contents/MacOS
-        os.system(f"cp -R '{src_folder}/' '{app_path}/Contents/MacOS/'")
+    if not os.path.exists(src_folder):
+        print(f"⚠️ Skipping bundle creation — {src_folder} not found.")
+        return
 
-        # --- Generate Info.plist ---
-        info_plist = f'''<?xml version="1.0" encoding="UTF-8"?>
+    print(f"\n📦 Creating .app bundle at {app_path}")
+    os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
+    os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
+
+    # Copy all collected files into Contents/MacOS
+    os.system(f"cp -R '{src_folder}/' '{app_path}/Contents/MacOS/'")
+
+    # --- Generate Info.plist ---
+    info_plist = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -100,20 +111,24 @@ if __name__ == "__main__":
     <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>'''
-        with open(os.path.join(app_path, "Contents", "Info.plist"), "w") as f:
-            f.write(info_plist)
+    plist_path = os.path.join(app_path, "Contents", "Info.plist")
+    with open(plist_path, "w") as f:
+        f.write(info_plist)
 
-        print("✅ .app bundle created successfully.")
+    print(f"✅ Info.plist written: {plist_path}")
+    print("✅ .app bundle created successfully.")
 
-        # --- Create DMG safely ---
-        dmg_path = os.path.join("dist", f"{app_name}.dmg")
-        try:
-            os.system(
-                f"hdiutil create -volname {app_name} "
-                f"-srcfolder '{app_path}' -ov -format UDZO '{dmg_path}'"
-            )
-            print(f"✅ DMG created: {dmg_path}")
-        except Exception as e:
-            print(f"⚠️ DMG creation failed: {e}")
+    # --- Create DMG safely ---
+    dmg_path = os.path.join("dist", f"{app_name}.dmg")
+    try:
+        os.system(
+            f"hdiutil create -volname {app_name} "
+            f"-srcfolder '{app_path}' -ov -format UDZO '{dmg_path}'"
+        )
+        print(f"✅ DMG created: {dmg_path}")
+    except Exception as e:
+        print(f"⚠️ DMG creation failed: {e}")
 
+# Only run bundle creation after build, not during PyInstaller import
+if os.environ.get("PYINSTALLER_RUNNING") != "true":
     create_bundle()
