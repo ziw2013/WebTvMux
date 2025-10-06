@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Stable macOS Build - No COLLECT)
+# build_macos.spec — WebTvMux (Final Guaranteed Folder Build)
 # ===========================================
 
 import os
@@ -34,7 +34,7 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Clean up old builds ---
+# --- Clean previous builds ---
 for d in ["build", "dist"]:
     if os.path.exists(d):
         print(f"🧹 Removing old {d}/ folder...")
@@ -44,7 +44,7 @@ os.makedirs("build/build_macos", exist_ok=True)
 
 root = os.path.abspath(".")
 
-# --- Main analysis ---
+# --- Analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
@@ -56,40 +56,48 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure)
-exe = EXE(
-    pyz,
-    a.scripts,
-    name=app_name,
-    console=False,
-    debug=False,
+exe = EXE(pyz, a.scripts, name=app_name, console=False)
+
+# ✅ Use temporary name to avoid recursion
+app_temp_name = f"{app_name}_temp"
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name=app_temp_name,
 )
 
-# ✅ No COLLECT step! We will manually treat dist/WebTvMux as output
-#    (onedir mode). PyInstaller will automatically produce a folder.
-
 # ===================================================================
-# Post-build: copy bin/config, chmod, .app and DMG creation
+# Post-build: rename folder, add bin/config, build .app + .dmg
 # ===================================================================
 def post_build():
-    src_folder = os.path.join("dist", app_name)
+    src_temp = os.path.join("dist", app_temp_name)
+    final_folder = os.path.join("dist", app_name)
     app_path = os.path.join("dist", f"{app_name}.app")
 
-    # Wait for PyInstaller to finish
+    # Wait for temp folder
     for _ in range(30):
-        if os.path.exists(src_folder):
+        if os.path.isdir(src_temp):
             break
         time.sleep(1)
-
-    if not os.path.exists(src_folder):
-        print(f"❌ Build folder not found: {src_folder}")
+    if not os.path.isdir(src_temp):
+        print(f"❌ dist/{app_temp_name} not found or not a directory.")
         return
 
-    print(f"✅ Build folder found: {src_folder}")
+    # --- Rename to final name ---
+    if os.path.exists(final_folder):
+        shutil.rmtree(final_folder, ignore_errors=True)
+    shutil.move(src_temp, final_folder)
+    print(f"✅ Renamed build folder: {app_temp_name} → {app_name}")
 
-    # --- Copy bin and config folders ---
+    # --- Copy bin/config ---
     for folder in ["bin", "config"]:
         if os.path.isdir(folder):
-            dest = os.path.join(src_folder, folder)
+            dest = os.path.join(final_folder, folder)
             os.makedirs(dest, exist_ok=True)
             for f in glob.glob(os.path.join(folder, "*")):
                 shutil.copy(f, dest)
@@ -101,9 +109,9 @@ def post_build():
     print(f"\n📦 Creating .app bundle at {app_path}")
     os.makedirs(os.path.join(app_path, "Contents", "MacOS"), exist_ok=True)
     os.makedirs(os.path.join(app_path, "Contents", "Resources"), exist_ok=True)
-    os.system(f"cp -R '{src_folder}/' '{app_path}/Contents/MacOS/'")
+    os.system(f"cp -R '{final_folder}/' '{app_path}/Contents/MacOS/'")
 
-    # --- Write Info.plist ---
+    # --- Info.plist ---
     plist = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -137,7 +145,7 @@ def post_build():
     )
     print(f"✅ DMG created: {dmg_path}")
 
-    # --- Tree summary ---
+    # --- Print tree summary ---
     print("\n📁 Final .app structure:")
     os.system(f"find '{app_path}' -maxdepth 3")
 
