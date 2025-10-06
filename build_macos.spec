@@ -1,9 +1,8 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Stable Build)
+# build_macos.spec — WebTvMux (Final macOS Fix)
 # ===========================================
 
 import os
-import glob
 from PyInstaller.utils.hooks import collect_submodules
 
 app_name = "WebTvMux"
@@ -41,17 +40,16 @@ excluded_modules = [
 os.makedirs("build/build_macos", exist_ok=True)
 print("📁 Ensured build path: build/build_macos")
 
-# --- Include required folders ---
-root = os.path.abspath(".")
+# --- Data files to include ---
 datas = []
-
-for src, dest in [
+include_files = [
     ("bin/ffmpeg", "bin"),
     ("bin/ffprobe", "bin"),
     ("bin/yt-dlp", "bin"),
     ("bin/yt-dlp_macos", "bin"),
     ("config/languages.json", "config"),
-]:
+]
+for src, dest in include_files:
     if os.path.exists(src):
         datas.append((os.path.abspath(src), dest))
 
@@ -62,7 +60,7 @@ for f, dest in datas:
 # --- Main Analysis ---
 a = Analysis(
     [entry_script],
-    pathex=[root],
+    pathex=["."],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -72,20 +70,19 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# --- Create macOS app bundle directly ---
 exe = EXE(
     pyz,
     a.scripts,
     name=app_name,
     console=False,
-    icon=None
 )
 
-# --- Collect into .app directly ---
-app_bundle = BUNDLE(
+app = BUNDLE(
     exe,
     name=f"{app_name}.app",
-    icon=None,
     bundle_identifier="com.webtvmux.app",
+    icon=None,
     info_plist={
         "CFBundleName": app_name,
         "CFBundleDisplayName": app_name,
@@ -95,15 +92,4 @@ app_bundle = BUNDLE(
     },
 )
 
-# --- Output to dist/WebTvMux.app ---
-coll = COLLECT(
-    app_bundle,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    name=f"{app_name}_macos",  # prevent conflict with inner WebTvMux folder
-)
-
-print("\n✅ macOS build process configured successfully.")
+print("\n✅ macOS .app bundle build configured successfully.")
