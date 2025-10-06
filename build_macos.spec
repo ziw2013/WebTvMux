@@ -1,6 +1,7 @@
 # ===========================================
 # build_macos.spec — WebTvMux (Final macOS Build)
 # Ensures bin/ and config/ included inside Contents/MacOS/
+# Optimized to reduce unnecessary Qt modules
 # ===========================================
 
 import os
@@ -50,7 +51,9 @@ if os.path.isdir(os.path.join(root, "config")):
 
 print("\n📦 Including folders recursively:")
 for d in datas:
-    print(f"  - {d.name} → {d.prefix}/")
+    src_path = getattr(d, "path", "unknown")
+    prefix = getattr(d, "prefix", "")
+    print(f"  - {os.path.basename(src_path)} → {prefix}/")
 
 # --- Core Analysis ---
 a = Analysis(

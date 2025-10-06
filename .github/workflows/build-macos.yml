@@ -1,74 +1,84 @@
-name: Build macOS App (Optimized)
+name: Build macOS App
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  pull_request:
 
 jobs:
-  build:
+  build-macos:
     runs-on: macos-latest
-
     steps:
-      - name: 🧩 Checkout repository
+      # --- Checkout repository ---
+      - name: 🧭 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      # --- Set up Python ---
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # --- Install dependencies ---
       - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller PySide6
+          pip install pyinstaller==6.* pyside6==6.* upx
 
-      - name: 🚀 Build macOS app using PyInstaller
+      # --- Verify binary and config folders before build ---
+      - name: 🧩 Verify local bin/config presence
         run: |
-          echo "🚀 Building optimized WebTvMux macOS app..."
-          mkdir -p build/build_macos dist
-          python -m PyInstaller build_macos.spec
-          echo "📂 dist contents:"
-          ls -l dist
+          echo "🧩 Checking local binaries and configs..."
+          ls -lh bin || echo "❌ bin folder missing!"
+          ls -lh config || echo "❌ config folder missing!"
 
-      - name: 🧰 Verify included resources
+      # --- Run PyInstaller build ---
+      - name: 🏗️ Build macOS App (.app + DMG)
+        run: |
+          echo "🏗️ Building macOS app bundle..."
+          python -m PyInstaller build_macos.spec
+
+      # --- Verify inclusion inside .app ---
+      - name: 🔍 Verify .app contents
         run: |
           echo "🔍 Verifying inclusion of binaries and config..."
           if [ -d "dist/WebTvMux.app/Contents/MacOS/bin" ]; then
-            echo "✅ bin folder found:"
-            ls -lh dist/WebTvMux.app/Contents/MacOS/bin
+            echo "✅ bin folder found inside .app:"
+            du -sh dist/WebTvMux.app/Contents/MacOS/bin/*
           else
-            echo "❌ bin folder missing!"; exit 1
+            echo "❌ bin folder missing inside .app!"
+            ls -R dist || true
           fi
+
           if [ -d "dist/WebTvMux.app/Contents/MacOS/config" ]; then
-            echo "✅ config folder found:"
+            echo "✅ config folder found inside .app:"
             ls -lh dist/WebTvMux.app/Contents/MacOS/config
           else
-            echo "❌ config folder missing!"; exit 1
+            echo "❌ config folder missing inside .app!"
           fi
 
-      - name: 🧹 Cleanup unnecessary Qt frameworks
+      # --- Create DMG and ZIP ---
+      - name: 📦 Package .app into DMG and ZIP
         run: |
-          echo "🧹 Cleaning unused Qt frameworks..."
-          find dist/WebTvMux.app -name "QtPdf*" -delete
-          find dist/WebTvMux.app -name "QtQuick*" -delete
-          find dist/WebTvMux.app -name "QtQml*" -delete
-          find dist/WebTvMux.app -name "QtShaderTools*" -delete
-          find dist/WebTvMux.app -name "Qt3D*" -delete
-          find dist/WebTvMux.app -name "QtGraphs*" -delete
-          find dist/WebTvMux.app -name "QtMultimedia*" -delete
-          echo "✅ Slim cleanup complete."
+          echo "📦 Creating DMG..."
+          mkdir -p dist/release
+          hdiutil create -volname WebTvMux \
+            -srcfolder "dist/WebTvMux.app" \
+            -ov -format UDZO "dist/release/WebTvMux.dmg"
 
-      - name: 📦 Create compressed ZIP
-        run: |
-          echo "📦 Creating WebTvMux-macOS.zip..."
+          echo "📦 Creating ZIP..."
           cd dist
-          zip -r WebTvMux-macOS.zip WebTvMux.app
-          ls -lh
+          zip -r release/WebTvMux.zip WebTvMux.app
+          cd ..
 
-      - name: 📤 Upload artifact
+          echo "✅ Packaging complete:"
+          du -sh dist/release/*
+
+      # --- Upload artifacts for download ---
+      - name: ⬆️ Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: WebTvMux-macOS
-          path: dist/WebTvMux-macOS.zip
+          path: |
+            dist/release/WebTvMux.dmg
+            dist/release/WebTvMux.zip
