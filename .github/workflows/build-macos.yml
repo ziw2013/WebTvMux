@@ -24,40 +24,30 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      - name: 🧩 Check project structure
-        run: |
-          echo "📂 Project tree (top level):"
-          ls -R | head -n 40
-
       - name: 🚀 Build macOS app using PyInstaller
         run: |
           echo "🚀 Building optimized macOS app..."
           mkdir -p build/build_macos dist
           python -m PyInstaller build_macos.spec
-
-          echo "✅ Checking for app bundle..."
-          if [ -d "dist/WebTvMux" ]; then
-            echo "📦 Found folder dist/WebTvMux — renaming..."
-            mv dist/WebTvMux dist/WebTvMux.app
-          fi
-
-          echo "📂 dist contents after rename:"
+          echo "📂 dist contents:"
           ls -l dist
 
       - name: 🧰 Verify included folders
         run: |
           echo "🔍 Checking included resources..."
-          if [ -d "dist/WebTvMux.app/bin" ]; then
+          if [ -d "dist/WebTvMux.app/Contents/MacOS/bin" ]; then
             echo "✅ bin folder found:"
-            ls -lh dist/WebTvMux.app/bin
+            ls -lh dist/WebTvMux.app/Contents/MacOS/bin
           else
             echo "⚠️ bin folder missing!"
+            find dist -type d -name "bin"
           fi
-          if [ -d "dist/WebTvMux.app/config" ]; then
+          if [ -d "dist/WebTvMux.app/Contents/MacOS/config" ]; then
             echo "✅ config folder found:"
-            ls -lh dist/WebTvMux.app/config
+            ls -lh dist/WebTvMux.app/Contents/MacOS/config
           else
             echo "⚠️ config folder missing!"
+            find dist -type d -name "config"
           fi
 
       - name: 🧹 Cleanup extra Qt libraries to reduce size
@@ -72,11 +62,11 @@ jobs:
           find dist/WebTvMux.app -name "QtMultimedia*" -delete
           echo "✅ Slim cleanup complete."
 
-      - name: 📦 Package .app and .dmg into ZIP
+      - name: 📦 Create macOS ZIP
         run: |
           echo "📦 Creating WebTvMux-macOS.zip..."
           cd dist
-          zip -r WebTvMux-macOS.zip WebTvMux.app WebTvMux.dmg || echo "⚠️ No DMG found, zipping .app only"
+          zip -r WebTvMux-macOS.zip WebTvMux.app || echo "⚠️ No .app found!"
           ls -lh
 
       - name: 📤 Upload artifact
