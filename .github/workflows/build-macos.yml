@@ -1,4 +1,4 @@
-name: Build WebTvMux macOS App (Lean)
+name: Build WebTvMux macOS Release
 
 on:
   workflow_dispatch:
@@ -7,79 +7,127 @@ on:
 
 jobs:
   build-macos:
-    name: Build optimized macOS .app and .dmg
+    name: Build & Package macOS App
     runs-on: macos-latest
 
     steps:
-      # -------------------------------
-      # ✅ Checkout project
-      # -------------------------------
+      # --------------------------------
+      # ✅ Checkout repo
+      # --------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # -------------------------------
+      # --------------------------------
       # ✅ Set up Python
-      # -------------------------------
+      # --------------------------------
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # -------------------------------
+      # --------------------------------
       # ✅ Install dependencies
-      # -------------------------------
+      # --------------------------------
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      # -------------------------------
-      # ✅ Verify assets before build
-      # -------------------------------
-      - name: Verify bin and config folders
+      # --------------------------------
+      # ✅ Verify local binaries and config
+      # --------------------------------
+      - name: Verify bin and config
         run: |
           echo "🧩 Checking local binaries and configs..."
           ls -lh bin || echo "⚠️ bin folder missing"
           ls -lh config || echo "⚠️ config folder missing"
 
-          # Rename yt-dlp_macos if needed
+          # Rename yt-dlp_macos if present
           if [ -f "bin/yt-dlp_macos" ]; then
             mv bin/yt-dlp_macos bin/yt-dlp
             echo "🔧 Renamed yt-dlp_macos → yt-dlp"
           fi
 
-          # Ensure binaries are executable
+          # Ensure executables are runnable
           chmod +x bin/* || true
-          echo "✅ All binaries marked executable"
+          echo "✅ All binaries are executable"
 
-      # -------------------------------
-      # ✅ Run PyInstaller build
-      # -------------------------------
-      - name: Build optimized unsigned macOS app
+      # --------------------------------
+      # ✅ Build the macOS app
+      # --------------------------------
+      - name: Run PyInstaller build
         run: |
           echo "🚀 Building optimized macOS app..."
           python -m PyInstaller build_macos.spec
 
-      # -------------------------------
-      # ✅ Post-build inspection
-      # -------------------------------
-      - name: Check build output and sizes
+      # --------------------------------
+      # ✅ Strip unused Qt frameworks
+      # --------------------------------
+      - name: Strip unnecessary Qt frameworks
         run: |
-          echo "📦 Build results in dist/:"
+          echo "🧹 Removing unused Qt frameworks..."
+          find dist/WebTvMux.app -name "Qt3D*" -delete || true
+          find dist/WebTvMux.app -name "QtQuick*" -delete || true
+          find dist/WebTvMux.app -name "QtQml*" -delete || true
+          find dist/WebTvMux.app -name "QtMultimedia*" -delete || true
+          find dist/WebTvMux.app -name "QtShaderTools*" -delete || true
+          find dist/WebTvMux.app -name "QtPdf*" -delete || true
+          find dist/WebTvMux.app -name "QtGraphs*" -delete || true
+          echo "✅ Cleanup done."
+
+      # --------------------------------
+      # ✅ Inspect build results
+      # --------------------------------
+      - name: Inspect dist folder
+        run: |
+          echo "📦 Build contents:"
           ls -R dist || true
           echo ""
           echo "📏 Size summary:"
           du -sh dist/* | sort -h || true
-          echo ""
-          echo "✅ Build finished successfully."
 
-      # -------------------------------
-      # ✅ Upload Artifacts (.app and .dmg)
-      # -------------------------------
-      - name: Upload macOS Artifacts
+      # --------------------------------
+      # ✅ Ad-hoc sign (to bypass Gatekeeper)
+      # --------------------------------
+      - name: Ad-hoc sign .app
+        run: |
+          if [ -d "dist/WebTvMux.app" ]; then
+            echo "🔏 Signing WebTvMux.app ad-hoc..."
+            codesign --force --deep --sign - "dist/WebTvMux.app" || true
+          fi
+
+      # --------------------------------
+      # ✅ Compress .app and .dmg into ZIP
+      # --------------------------------
+      - name: Package into ZIP
+        run: |
+          echo "📦 Creating ZIP archive..."
+          cd dist
+          zip -r WebTvMux-macOS.zip WebTvMux.app WebTvMux.dmg
+          cd ..
+          echo "✅ ZIP created: dist/WebTvMux-macOS.zip"
+
+      # --------------------------------
+      # ✅ Upload all build artifacts
+      # --------------------------------
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: WebTvMux-macOS-Lean-Build
+          name: WebTvMux-macOS-Release
           path: |
             dist/WebTvMux.app
             dist/WebTvMux.dmg
+            dist/WebTvMux-macOS.zip
+
+      # --------------------------------
+      # ✅ Final build summary
+      # --------------------------------
+      - name: Show final build report
+        run: |
+          echo "🎉 macOS Build Completed Successfully!"
+          du -sh dist/* | sort -h
+          echo ""
+          echo "📦 Uploaded Artifacts:"
+          echo " - WebTvMux.app"
+          echo " - WebTvMux.dmg"
+          echo " - WebTvMux-macOS.zip"
