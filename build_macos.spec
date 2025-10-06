@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux Final macOS Build
+# build_macos.spec — WebTvMux (Final Fixed macOS Build)
 # ===========================================
 
 import os
@@ -26,7 +26,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Exclude unused / heavy Qt & Python modules ---
+# --- Exclude heavy / unused Qt and Python modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "pytest", "PyQt5",
@@ -38,7 +38,7 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Include binaries and configs ---
+# --- Gather data folders (bin + config) ---
 root = os.path.abspath(".")
 datas = []
 for folder, dest in [("bin", "bin"), ("config", "config")]:
@@ -52,7 +52,7 @@ print("\n📦 Files to include:")
 for f, dest in datas:
     print(f"  - {f} → {dest}/")
 
-# --- Main build configuration ---
+# --- Define Analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
@@ -63,8 +63,10 @@ a = Analysis(
     noarchive=False,
 )
 
+# --- Compile Python code ---
 pyz = PYZ(a.pure)
 
+# --- Build the executable ---
 exe = EXE(
     pyz,
     a.scripts,
@@ -72,11 +74,11 @@ exe = EXE(
     console=False,
 )
 
-# --- Bundle into macOS .app directly ---
+# --- Bundle directly into a .app (no COLLECT) ---
 app_bundle = BUNDLE(
     exe,
     name=f"{app_name}.app",
-    icon=None,
+    icon=None,  # You can replace with "icon.icns" if available
     bundle_identifier="com.webtvmux.app",
     info_plist={
         "CFBundleName": app_name,
@@ -86,16 +88,7 @@ app_bundle = BUNDLE(
         "CFBundleIdentifier": "com.webtvmux.app",
         "NSHighResolutionCapable": True,
     },
-)
-
-coll = COLLECT(
-    app_bundle,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    name=app_name,
+    datas=datas,  # ✅ Include bin/ and config/
 )
 
 print("\n✅ macOS .app bundle build configuration loaded successfully.")
