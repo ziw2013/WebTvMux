@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Non-Recursive macOS Build)
+# build_macos.spec — WebTvMux (Final Stable macOS Folder Build)
 # ===========================================
 
 import os
@@ -44,43 +44,49 @@ os.makedirs("build/build_macos", exist_ok=True)
 
 root = os.path.abspath(".")
 
-# --- Analysis ---
+# --- Core analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
     binaries=[],
-    datas=[],
+    datas=[],   # handled manually post-build
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
 )
 
 pyz = PYZ(a.pure)
-exe = EXE(
-    pyz,
-    a.scripts,
+exe = EXE(pyz, a.scripts, name=app_name, console=False)
+
+# ✅ Keep COLLECT, but never let it re-scan dist/
+app_coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
     name=app_name,
-    console=False,
-    debug=False,
+    destdir=os.path.abspath("dist"),   # ensures no nested dist/dist recursion
 )
 
 # ===================================================================
-# Manual bundle creation — replaces COLLECT entirely
+# Post-build: copy bin/config, chmod, and DMG creation
 # ===================================================================
 def post_build():
     src_folder = os.path.join("dist", app_name)
     app_path = os.path.join("dist", f"{app_name}.app")
 
-    # Wait for PyInstaller output
+    # Wait for folder to exist
     for _ in range(30):
-        if os.path.exists(src_folder):
+        if os.path.isdir(src_folder):
             break
         time.sleep(1)
-    if not os.path.exists(src_folder):
-        print(f"❌ Build folder not found: {src_folder}")
+    if not os.path.isdir(src_folder):
+        print(f"❌ dist/{app_name} not found or not a directory.")
         return
 
-    # --- Copy bin/config ---
+    # --- Copy bin and config folders ---
     for folder in ["bin", "config"]:
         if os.path.isdir(folder):
             dest = os.path.join(src_folder, folder)
@@ -114,12 +120,14 @@ def post_build():
         f.write(plist)
     print(f"✅ Info.plist written: {plist_path}")
 
-    # --- chmod bin ---
+    # --- chmod bin files ---
     bin_path = os.path.join(app_path, "Contents", "MacOS", "bin")
     if os.path.isdir(bin_path):
         for file in os.listdir(bin_path):
             os.chmod(os.path.join(bin_path, file), 0o755)
             print(f"  ✅ chmod +x {file}")
+    else:
+        print("⚠️ bin folder not found inside .app")
 
     # --- Create DMG ---
     dmg_path = os.path.join("dist", f"{app_name}.dmg")
@@ -128,6 +136,10 @@ def post_build():
         f"-srcfolder '{app_path}' -ov -format UDZO '{dmg_path}'"
     )
     print(f"✅ DMG created: {dmg_path}")
+
+    # --- Print tree summary (for CI logs) ---
+    print("\n📁 Final .app structure:")
+    os.system(f"find '{app_path}' -maxdepth 3")
 
 if os.environ.get("PYINSTALLER_RUNNING") != "true":
     post_build()
