@@ -1,4 +1,4 @@
-name: Build macOS App
+name: Build macOS App (Optimized)
 
 on:
   workflow_dispatch:
@@ -26,33 +26,31 @@ jobs:
 
       - name: 🚀 Build macOS app using PyInstaller
         run: |
-          echo "🚀 Building optimized macOS app..."
+          echo "🚀 Building optimized WebTvMux macOS app..."
           mkdir -p build/build_macos dist
           python -m PyInstaller build_macos.spec
           echo "📂 dist contents:"
           ls -l dist
 
-      - name: 🧰 Verify included folders
+      - name: 🧰 Verify included resources
         run: |
-          echo "🔍 Checking included resources..."
+          echo "🔍 Verifying inclusion of binaries and config..."
           if [ -d "dist/WebTvMux.app/Contents/MacOS/bin" ]; then
             echo "✅ bin folder found:"
             ls -lh dist/WebTvMux.app/Contents/MacOS/bin
           else
-            echo "⚠️ bin folder missing!"
-            find dist -type d -name "bin"
+            echo "❌ bin folder missing!"; exit 1
           fi
           if [ -d "dist/WebTvMux.app/Contents/MacOS/config" ]; then
             echo "✅ config folder found:"
             ls -lh dist/WebTvMux.app/Contents/MacOS/config
           else
-            echo "⚠️ config folder missing!"
-            find dist -type d -name "config"
+            echo "❌ config folder missing!"; exit 1
           fi
 
-      - name: 🧹 Cleanup extra Qt libraries to reduce size
+      - name: 🧹 Cleanup unnecessary Qt frameworks
         run: |
-          echo "🧹 Removing unneeded Qt frameworks..."
+          echo "🧹 Cleaning unused Qt frameworks..."
           find dist/WebTvMux.app -name "QtPdf*" -delete
           find dist/WebTvMux.app -name "QtQuick*" -delete
           find dist/WebTvMux.app -name "QtQml*" -delete
@@ -62,11 +60,11 @@ jobs:
           find dist/WebTvMux.app -name "QtMultimedia*" -delete
           echo "✅ Slim cleanup complete."
 
-      - name: 📦 Create macOS ZIP
+      - name: 📦 Create compressed ZIP
         run: |
           echo "📦 Creating WebTvMux-macOS.zip..."
           cd dist
-          zip -r WebTvMux-macOS.zip WebTvMux.app || echo "⚠️ No .app found!"
+          zip -r WebTvMux-macOS.zip WebTvMux.app
           ls -lh
 
       - name: 📤 Upload artifact

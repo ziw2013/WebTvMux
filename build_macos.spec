@@ -1,61 +1,59 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Fixed macOS Build)
+# build_macos.spec — WebTvMux (Optimized macOS Build)
 # ===========================================
 
 import os
-import glob
 from PyInstaller.utils.hooks import collect_submodules
 
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Collect only essential PySide6 modules ---
+# --- Collect essential PySide6 modules only ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
-        m.startswith("PySide6.Addons")
-        or m.startswith("PySide6.QtWebEngine")
+        m.startswith("PySide6.QtWebEngine")
         or m.startswith("PySide6.QtQml")
         or m.startswith("PySide6.QtQuick")
         or m.startswith("PySide6.QtQuick3D")
+        or m.startswith("PySide6.Qt3D")
         or m.startswith("PySide6.QtPdf")
         or m.startswith("PySide6.QtShaderTools")
-        or m.startswith("PySide6.QtMultimedia")
-        or m.startswith("PySide6.Qt3D")
         or m.startswith("PySide6.QtGraphs")
+        or m.startswith("PySide6.QtMultimedia")
+        or m.startswith("PySide6.Addons")
     ),
 )
 
-# --- Exclude heavy / unused Qt and Python modules ---
+# --- Exclude heavy and unused modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "pytest", "PyQt5",
     "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets",
-    "PySide6.QtWebEngineQuick", "PySide6.QtWebChannel",
-    "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtMultimedia",
-    "PySide6.Qt3DCore", "PySide6.QtGraphs",
-    "PySide6.QtDataVisualization", "PySide6.QtOpenGL",
+    "PySide6.QtWebChannel", "PySide6.QtQuick", "PySide6.QtQml",
+    "PySide6.QtMultimedia", "PySide6.Qt3DCore", "PySide6.Qt3DRender",
+    "PySide6.Qt3DExtras", "PySide6.QtDataVisualization",
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
+    "PySide6.QtGraphs", "PySide6.QtQuick3D", "PySide6.QtShaderTools",
+    "PySide6.QtPdf",
 ]
 
-# --- Gather data folders (bin + config) ---
-root = os.path.abspath(".")
-datas = []
-for folder, dest in [("bin", "bin"), ("config", "config")]:
-    folder_path = os.path.join(root, folder)
-    if os.path.isdir(folder_path):
-        for f in glob.glob(os.path.join(folder_path, "*")):
-            if os.path.isfile(f):
-                datas.append((os.path.abspath(f), dest))
+# --- Explicitly include binaries and config files ---
+datas = [
+    (os.path.join("bin", "ffmpeg"), "bin"),
+    (os.path.join("bin", "ffprobe"), "bin"),
+    (os.path.join("bin", "yt-dlp"), "bin"),
+    (os.path.join("config", "languages.json"), "config"),
+]
 
-print("\n📦 Files to include:")
+print("\n📦 Including resources:")
 for f, dest in datas:
     print(f"  - {f} → {dest}/")
 
-# --- Define Analysis ---
+# --- Build analysis ---
 a = Analysis(
     [entry_script],
-    pathex=[root],
+    pathex=[os.path.abspath(".")],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -63,22 +61,24 @@ a = Analysis(
     noarchive=False,
 )
 
-# --- Compile Python code ---
+# --- Package Python code ---
 pyz = PYZ(a.pure)
 
-# --- Build the executable ---
+# --- Build the main executable ---
 exe = EXE(
     pyz,
     a.scripts,
     name=app_name,
-    console=False,
+    console=False,  # set True for debugging
+    strip=True,     # ✅ remove debug symbols (smaller)
+    upx=True,       # ✅ compress binaries (safe on macOS arm64)
 )
 
-# --- Bundle directly into a .app (no COLLECT) ---
+# --- Bundle into .app directly ---
 app_bundle = BUNDLE(
     exe,
     name=f"{app_name}.app",
-    icon=None,  # You can replace with "icon.icns" if available
+    icon=None,  # Optional: use "icon.icns" if available
     bundle_identifier="com.webtvmux.app",
     info_plist={
         "CFBundleName": app_name,
@@ -88,7 +88,7 @@ app_bundle = BUNDLE(
         "CFBundleIdentifier": "com.webtvmux.app",
         "NSHighResolutionCapable": True,
     },
-    datas=datas,  # ✅ Include bin/ and config/
+    datas=datas,  # ✅ embed bin/ and config/
 )
 
-print("\n✅ macOS .app bundle build configuration loaded successfully.")
+print("\n✅ WebTvMux optimized .app build configuration ready.")
