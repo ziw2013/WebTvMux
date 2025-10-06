@@ -76,7 +76,7 @@ exe = EXE(
     name=app_name,
     console=False,  # True for debug mode
     strip=True,     # ✅ remove debug symbols
-    upx=True,       # ✅ compress binary safely
+    upx=False,       # ✅ compress binary safely
 )
 
 # --- Create .app bundle directly ---
