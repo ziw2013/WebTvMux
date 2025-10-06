@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Stable Build)
+# build_macos.spec — WebTvMux (Lean & Stable Build)
 # ===========================================
 
 import os
@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_submodules
 app_name = "WebTvMux"
 entry_script = "main.py"
 
-# --- Minimal PySide6 subset ---
+# --- Collect minimal PySide6 subset ---
 hiddenimports = collect_submodules(
     "PySide6",
     filter=lambda m: not (
@@ -32,6 +32,8 @@ excluded_modules = [
     "PySide6.Qt3DCore", "PySide6.QtGraphs",
     "PySide6.QtDataVisualization", "PySide6.QtOpenGL",
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
+    "PySide6.QtSensors", "PySide6.QtPositioning", "PySide6.QtNfc",
+    "PySide6.QtLocation", "PySide6.QtPdf", "PySide6.QtDesigner"
 ]
 
 # --- Clean old build/dist ---
@@ -52,13 +54,13 @@ a = Analysis(
     datas=[],
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
-    noarchive=False,
+    noarchive=True,  # ✅ reduces duplication of modules
 )
 
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# ✅ Use a temporary name to avoid PyInstaller folder recursion
+# ✅ Use temporary folder to avoid recursion
 app_temp_name = f"{app_name}_temp"
 
 coll = COLLECT(
@@ -67,12 +69,12 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=False,
+    upx=False,  # ✅ skip UPX for mac stability
     name=app_temp_name,
 )
 
 # ===================================================================
-# 🏗️ Post-build logic
+# 🏗️ Post-build optimization and bundle creation
 # ===================================================================
 def post_build():
     src_temp = os.path.join("dist", app_temp_name)
@@ -88,10 +90,9 @@ def post_build():
         print(f"❌ dist/{app_temp_name} not found or not a directory.")
         return
 
-    # 🧹 Remove any existing file/folder named dist/WebTvMux
+    # 🧹 Remove any preexisting file/folder
     if os.path.exists(final_folder):
         if os.path.isfile(final_folder):
-            print(f"⚠️ Removing leftover file: {final_folder}")
             os.remove(final_folder)
         else:
             shutil.rmtree(final_folder, ignore_errors=True)
@@ -110,6 +111,32 @@ def post_build():
                 print(f"📦 Copied {f} → {dest}")
         else:
             print(f"⚠️ Missing local folder: {folder}")
+
+    # --- Cleanup unused Qt frameworks ---
+    qt_dir = os.path.join(final_folder, "PySide6")
+    if os.path.isdir(qt_dir):
+        print("🧹 Removing unused Qt frameworks...")
+        for name in [
+            "Qt3DCore", "Qt3DRender", "Qt3DExtras", "QtQml", "QtQuick",
+            "QtWebEngineCore", "QtWebEngineWidgets", "QtWebChannel",
+            "QtPdf", "QtMultimedia", "QtCharts", "QtSql", "QtSensors",
+            "QtPositioning", "QtNfc", "QtLocation", "QtOpenGL",
+        ]:
+            path = os.path.join(qt_dir, f"{name}.dylib")
+            if os.path.exists(path):
+                os.remove(path)
+                print(f"  🗑️ Removed {name}.dylib")
+
+    # --- Strip debug symbols ---
+    print("🔧 Stripping debug symbols from .dylib files...")
+    os.system(f"find '{final_folder}' -name '*.dylib' -exec strip -S {{}} \\; 2>/dev/null || true")
+
+    # --- Remove unneeded folders ---
+    for sub in ["qml", "translations", "examples", "tests", "plugins"]:
+        path = os.path.join(final_folder, sub)
+        if os.path.exists(path):
+            shutil.rmtree(path, ignore_errors=True)
+            print(f"  🗑️ Removed {sub}/")
 
     # --- Create .app bundle ---
     print(f"\n📦 Creating .app bundle at {app_path}")

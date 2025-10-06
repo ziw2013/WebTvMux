@@ -1,4 +1,4 @@
-name: Build WebTvMux macOS App
+name: Build WebTvMux macOS App (Lean)
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-macos:
-    name: Build unsigned macOS .app and .dmg
+    name: Build optimized macOS .app and .dmg
     runs-on: macos-latest
 
     steps:
@@ -26,7 +26,7 @@ jobs:
           python-version: '3.11'
 
       # -------------------------------
-      # ✅ Install build dependencies
+      # ✅ Install dependencies
       # -------------------------------
       - name: Install dependencies
         run: |
@@ -34,7 +34,7 @@ jobs:
           pip install pyinstaller PySide6
 
       # -------------------------------
-      # ✅ Verify required assets exist
+      # ✅ Verify assets before build
       # -------------------------------
       - name: Verify bin and config folders
         run: |
@@ -55,28 +55,31 @@ jobs:
       # -------------------------------
       # ✅ Run PyInstaller build
       # -------------------------------
-      - name: Build unsigned macOS app
+      - name: Build optimized unsigned macOS app
         run: |
-          echo "🚀 Building unsigned macOS app..."
+          echo "🚀 Building optimized macOS app..."
           python -m PyInstaller build_macos.spec
 
       # -------------------------------
-      # ✅ Show results summary
+      # ✅ Post-build inspection
       # -------------------------------
-      - name: Verify build results
+      - name: Check build output and sizes
         run: |
-          echo "📦 Contents of dist/:"
+          echo "📦 Build results in dist/:"
           ls -R dist || true
           echo ""
-          echo "✅ Build completed."
+          echo "📏 Size summary:"
+          du -sh dist/* | sort -h || true
+          echo ""
+          echo "✅ Build finished successfully."
 
       # -------------------------------
       # ✅ Upload Artifacts (.app and .dmg)
       # -------------------------------
-      - name: Upload macOS App and DMG
+      - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: WebTvMux-macOS-Build
+          name: WebTvMux-macOS-Lean-Build
           path: |
             dist/WebTvMux.app
             dist/WebTvMux.dmg
