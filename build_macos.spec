@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Stable macOS Folder Build)
+# build_macos.spec — WebTvMux (Final Stable macOS Build - No COLLECT)
 # ===========================================
 
 import os
@@ -34,7 +34,7 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Clean old builds ---
+# --- Clean up old builds ---
 for d in ["build", "dist"]:
     if os.path.exists(d):
         print(f"🧹 Removing old {d}/ folder...")
@@ -44,47 +44,47 @@ os.makedirs("build/build_macos", exist_ok=True)
 
 root = os.path.abspath(".")
 
-# --- Core analysis ---
+# --- Main analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
     binaries=[],
-    datas=[],   # handled manually post-build
+    datas=[],
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
 )
 
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, name=app_name, console=False)
-
-# ✅ Keep COLLECT, but never let it re-scan dist/
-app_coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
+exe = EXE(
+    pyz,
+    a.scripts,
     name=app_name,
-    destdir=os.path.abspath("dist"),   # ensures no nested dist/dist recursion
+    console=False,
+    debug=False,
 )
 
+# ✅ No COLLECT step! We will manually treat dist/WebTvMux as output
+#    (onedir mode). PyInstaller will automatically produce a folder.
+
 # ===================================================================
-# Post-build: copy bin/config, chmod, and DMG creation
+# Post-build: copy bin/config, chmod, .app and DMG creation
 # ===================================================================
 def post_build():
     src_folder = os.path.join("dist", app_name)
     app_path = os.path.join("dist", f"{app_name}.app")
 
-    # Wait for folder to exist
+    # Wait for PyInstaller to finish
     for _ in range(30):
-        if os.path.isdir(src_folder):
+        if os.path.exists(src_folder):
             break
         time.sleep(1)
-    if not os.path.isdir(src_folder):
-        print(f"❌ dist/{app_name} not found or not a directory.")
+
+    if not os.path.exists(src_folder):
+        print(f"❌ Build folder not found: {src_folder}")
         return
+
+    print(f"✅ Build folder found: {src_folder}")
 
     # --- Copy bin and config folders ---
     for folder in ["bin", "config"]:
@@ -137,7 +137,7 @@ def post_build():
     )
     print(f"✅ DMG created: {dmg_path}")
 
-    # --- Print tree summary (for CI logs) ---
+    # --- Tree summary ---
     print("\n📁 Final .app structure:")
     os.system(f"find '{app_path}' -maxdepth 3")
 
