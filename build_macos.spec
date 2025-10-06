@@ -1,11 +1,11 @@
 # ===========================================
-# build_macos.spec — Final Stable Universal Version
+# build_macos.spec — WebTvMux Final macOS Build (Tree fixed for PyInstaller ≥6.7)
 # ===========================================
 
 import os
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
-from PyInstaller.building.datastruct import Tree, TOC
+from PyInstaller.building.datastruct import Tree
 
 app_name = "WebTvMux"
 entry_script = "main.py"
@@ -13,7 +13,7 @@ entry_script = "main.py"
 # --- Collect PySide6 submodules ---
 hiddenimports = collect_submodules("PySide6")
 
-# --- Exclude unused Qt modules to minimize size ---
+# --- Exclude heavy / unused Qt modules ---
 excluded_modules = [
     "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets",
     "PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick",
@@ -22,31 +22,26 @@ excluded_modules = [
     "PySide6.QtSql", "PySide6.QtShaderTools", "PySide6.QtGraphs",
 ]
 
-# --- Include bin/ and config/ folders recursively ---
-datas_list = []
+# --- Include bin/ and config/ recursively ---
+datas = []
 if os.path.isdir("bin"):
-    datas_list.append(("bin", "bin"))
+    datas.append(Tree("bin", prefix="bin"))
 if os.path.isdir("config"):
-    datas_list.append(("config", "config"))
+    datas.append(Tree("config", prefix="config"))
 
 print("📦 Including folders recursively:")
-for src, dest in datas_list:
-    print(f"  - {src} → {dest}/")
-
-# ✅ Convert folders into TOC using Tree()
-datas = TOC([])
-for src, dest in datas_list:
-    if os.path.isdir(src):
-        datas += Tree(src, prefix=dest).toc
-    elif os.path.isfile(src):
-        datas.append((src, dest))
+for d in datas:
+    try:
+        print(f"  - {d.root} → {d.prefix}/")
+    except Exception:
+        print(f"  - Tree → {getattr(d, 'prefix', '?')}/")
 
 # --- Core Analysis ---
 a = Analysis(
     [entry_script],
     pathex=["."],
     binaries=[],
-    datas=datas,
+    datas=datas,     # ✅ directly pass Tree() objects
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
