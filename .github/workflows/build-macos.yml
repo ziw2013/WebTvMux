@@ -7,35 +7,35 @@ on:
 
 jobs:
   build-macos:
-    name: Build & Package macOS App
+    name: Build & Package WebTvMux for macOS
     runs-on: macos-latest
 
     steps:
-      # --------------------------------
+      # -------------------------------
       # ✅ Checkout repo
-      # --------------------------------
+      # -------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --------------------------------
+      # -------------------------------
       # ✅ Set up Python
-      # --------------------------------
+      # -------------------------------
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # --------------------------------
+      # -------------------------------
       # ✅ Install dependencies
-      # --------------------------------
+      # -------------------------------
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      # --------------------------------
-      # ✅ Verify local binaries and config
-      # --------------------------------
+      # -------------------------------
+      # ✅ Verify bin/config folders
+      # -------------------------------
       - name: Verify bin and config
         run: |
           echo "🧩 Checking local binaries and configs..."
@@ -52,18 +52,18 @@ jobs:
           chmod +x bin/* || true
           echo "✅ All binaries are executable"
 
-      # --------------------------------
-      # ✅ Build the macOS app
-      # --------------------------------
-      - name: Run PyInstaller build
+      # -------------------------------
+      # ✅ Build with PyInstaller
+      # -------------------------------
+      - name: Build macOS app using PyInstaller
         run: |
           echo "🚀 Building optimized macOS app..."
           python -m PyInstaller build_macos.spec
 
-      # --------------------------------
+      # -------------------------------
       # ✅ Strip unused Qt frameworks
-      # --------------------------------
-      - name: Strip unnecessary Qt frameworks
+      # -------------------------------
+      - name: Remove unused Qt frameworks
         run: |
           echo "🧹 Removing unused Qt frameworks..."
           find dist/WebTvMux.app -name "Qt3D*" -delete || true
@@ -73,22 +73,22 @@ jobs:
           find dist/WebTvMux.app -name "QtShaderTools*" -delete || true
           find dist/WebTvMux.app -name "QtPdf*" -delete || true
           find dist/WebTvMux.app -name "QtGraphs*" -delete || true
-          echo "✅ Cleanup done."
+          echo "✅ Slim cleanup complete."
 
-      # --------------------------------
+      # -------------------------------
       # ✅ Inspect build results
-      # --------------------------------
-      - name: Inspect dist folder
+      # -------------------------------
+      - name: Inspect build results
         run: |
-          echo "📦 Build contents:"
+          echo "📦 Build output in dist/:"
           ls -R dist || true
           echo ""
           echo "📏 Size summary:"
           du -sh dist/* | sort -h || true
 
-      # --------------------------------
-      # ✅ Ad-hoc sign (to bypass Gatekeeper)
-      # --------------------------------
+      # -------------------------------
+      # ✅ Ad-hoc sign to bypass Gatekeeper
+      # -------------------------------
       - name: Ad-hoc sign .app
         run: |
           if [ -d "dist/WebTvMux.app" ]; then
@@ -96,20 +96,36 @@ jobs:
             codesign --force --deep --sign - "dist/WebTvMux.app" || true
           fi
 
-      # --------------------------------
-      # ✅ Compress .app and .dmg into ZIP
-      # --------------------------------
-      - name: Package into ZIP
+      # -------------------------------
+      # ✅ Safe ZIP packaging
+      # -------------------------------
+      - name: Package into ZIP (Release folder)
         run: |
-          echo "📦 Creating ZIP archive..."
-          cd dist
-          zip -r WebTvMux-macOS.zip WebTvMux.app WebTvMux.dmg
-          cd ..
-          echo "✅ ZIP created: dist/WebTvMux-macOS.zip"
+          echo "📦 Preparing release folder..."
+          mkdir -p dist/release
 
-      # --------------------------------
-      # ✅ Upload all build artifacts
-      # --------------------------------
+          if [ -d "dist/WebTvMux.app" ]; then
+            cp -R dist/WebTvMux.app dist/release/
+          else
+            echo "❌ WebTvMux.app not found!"
+            exit 1
+          fi
+
+          if [ -f "dist/WebTvMux.dmg" ]; then
+            cp dist/WebTvMux.dmg dist/release/
+          else
+            echo "⚠️ No DMG found, continuing..."
+          fi
+
+          cd dist/release
+          echo "📦 Creating WebTvMux-macOS.zip..."
+          zip -r ../WebTvMux-macOS.zip . || exit 1
+          cd ../..
+          echo "✅ Created dist/WebTvMux-macOS.zip"
+
+      # -------------------------------
+      # ✅ Upload artifacts
+      # -------------------------------
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -118,16 +134,19 @@ jobs:
             dist/WebTvMux.app
             dist/WebTvMux.dmg
             dist/WebTvMux-macOS.zip
+            dist/release/
 
-      # --------------------------------
-      # ✅ Final build summary
-      # --------------------------------
-      - name: Show final build report
+      # -------------------------------
+      # ✅ Final summary
+      # -------------------------------
+      - name: Final build summary
         run: |
-          echo "🎉 macOS Build Completed Successfully!"
+          echo "🎉 WebTvMux macOS build complete!"
+          echo ""
+          echo "📂 dist folder contents:"
+          ls -lh dist || true
+          echo ""
+          echo "📏 Size report:"
           du -sh dist/* | sort -h
           echo ""
-          echo "📦 Uploaded Artifacts:"
-          echo " - WebTvMux.app"
-          echo " - WebTvMux.dmg"
-          echo " - WebTvMux-macOS.zip"
+          echo "✅ Artifacts uploaded to Actions → Artifacts tab."
