@@ -1,152 +1,86 @@
-name: Build WebTvMux macOS Release
+name: Build macOS App
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
-  build-macos:
-    name: Build & Package WebTvMux for macOS
+  build:
     runs-on: macos-latest
 
     steps:
-      # -------------------------------
-      # ✅ Checkout repo
-      # -------------------------------
-      - name: Checkout repository
+      - name: 🧩 Checkout repository
         uses: actions/checkout@v4
 
-      # -------------------------------
-      # ✅ Set up Python
-      # -------------------------------
-      - name: Set up Python 3.11
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # -------------------------------
-      # ✅ Install dependencies
-      # -------------------------------
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      # -------------------------------
-      # ✅ Verify bin/config folders
-      # -------------------------------
-      - name: Verify bin and config
+      - name: 🧩 Check project structure
         run: |
-          echo "🧩 Checking local binaries and configs..."
-          ls -lh bin || echo "⚠️ bin folder missing"
-          ls -lh config || echo "⚠️ config folder missing"
+          echo "📂 Project tree (top level):"
+          ls -R | head -n 40
 
-          # Rename yt-dlp_macos if present
-          if [ -f "bin/yt-dlp_macos" ]; then
-            mv bin/yt-dlp_macos bin/yt-dlp
-            echo "🔧 Renamed yt-dlp_macos → yt-dlp"
-          fi
-
-          # Ensure executables are runnable
-          chmod +x bin/* || true
-          echo "✅ All binaries are executable"
-
-      # -------------------------------
-      # ✅ Build with PyInstaller
-      # -------------------------------
-      - name: Build macOS app using PyInstaller
+      - name: 🚀 Build macOS app using PyInstaller
         run: |
           echo "🚀 Building optimized macOS app..."
+          mkdir -p build/build_macos dist
           python -m PyInstaller build_macos.spec
 
-      # -------------------------------
-      # ✅ Strip unused Qt frameworks
-      # -------------------------------
-      - name: Remove unused Qt frameworks
+          echo "✅ Checking for app bundle..."
+          if [ -d "dist/WebTvMux" ]; then
+            echo "📦 Found folder dist/WebTvMux — renaming..."
+            mv dist/WebTvMux dist/WebTvMux.app
+          fi
+
+          echo "📂 dist contents after rename:"
+          ls -l dist
+
+      - name: 🧰 Verify included folders
         run: |
-          echo "🧹 Removing unused Qt frameworks..."
-          find dist/WebTvMux.app -name "Qt3D*" -delete || true
-          find dist/WebTvMux.app -name "QtQuick*" -delete || true
-          find dist/WebTvMux.app -name "QtQml*" -delete || true
-          find dist/WebTvMux.app -name "QtMultimedia*" -delete || true
-          find dist/WebTvMux.app -name "QtShaderTools*" -delete || true
-          find dist/WebTvMux.app -name "QtPdf*" -delete || true
-          find dist/WebTvMux.app -name "QtGraphs*" -delete || true
+          echo "🔍 Checking included resources..."
+          if [ -d "dist/WebTvMux.app/bin" ]; then
+            echo "✅ bin folder found:"
+            ls -lh dist/WebTvMux.app/bin
+          else
+            echo "⚠️ bin folder missing!"
+          fi
+          if [ -d "dist/WebTvMux.app/config" ]; then
+            echo "✅ config folder found:"
+            ls -lh dist/WebTvMux.app/config
+          else
+            echo "⚠️ config folder missing!"
+          fi
+
+      - name: 🧹 Cleanup extra Qt libraries to reduce size
+        run: |
+          echo "🧹 Removing unneeded Qt frameworks..."
+          find dist/WebTvMux.app -name "QtPdf*" -delete
+          find dist/WebTvMux.app -name "QtQuick*" -delete
+          find dist/WebTvMux.app -name "QtQml*" -delete
+          find dist/WebTvMux.app -name "QtShaderTools*" -delete
+          find dist/WebTvMux.app -name "Qt3D*" -delete
+          find dist/WebTvMux.app -name "QtGraphs*" -delete
+          find dist/WebTvMux.app -name "QtMultimedia*" -delete
           echo "✅ Slim cleanup complete."
 
-      # -------------------------------
-      # ✅ Inspect build results
-      # -------------------------------
-      - name: Inspect build results
+      - name: 📦 Package .app and .dmg into ZIP
         run: |
-          echo "📦 Build output in dist/:"
-          ls -R dist || true
-          echo ""
-          echo "📏 Size summary:"
-          du -sh dist/* | sort -h || true
-
-      # -------------------------------
-      # ✅ Ad-hoc sign to bypass Gatekeeper
-      # -------------------------------
-      - name: Ad-hoc sign .app
-        run: |
-          if [ -d "dist/WebTvMux.app" ]; then
-            echo "🔏 Signing WebTvMux.app ad-hoc..."
-            codesign --force --deep --sign - "dist/WebTvMux.app" || true
-          fi
-
-      # -------------------------------
-      # ✅ Safe ZIP packaging
-      # -------------------------------
-      - name: Package into ZIP (Release folder)
-        run: |
-          echo "📦 Preparing release folder..."
-          mkdir -p dist/release
-
-          if [ -d "dist/WebTvMux.app" ]; then
-            cp -R dist/WebTvMux.app dist/release/
-          else
-            echo "❌ WebTvMux.app not found!"
-            exit 1
-          fi
-
-          if [ -f "dist/WebTvMux.dmg" ]; then
-            cp dist/WebTvMux.dmg dist/release/
-          else
-            echo "⚠️ No DMG found, continuing..."
-          fi
-
-          cd dist/release
           echo "📦 Creating WebTvMux-macOS.zip..."
-          zip -r ../WebTvMux-macOS.zip . || exit 1
-          cd ../..
-          echo "✅ Created dist/WebTvMux-macOS.zip"
+          cd dist
+          zip -r WebTvMux-macOS.zip WebTvMux.app WebTvMux.dmg || echo "⚠️ No DMG found, zipping .app only"
+          ls -lh
 
-      # -------------------------------
-      # ✅ Upload artifacts
-      # -------------------------------
-      - name: Upload macOS artifacts
+      - name: 📤 Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WebTvMux-macOS-Release
-          path: |
-            dist/WebTvMux.app
-            dist/WebTvMux.dmg
-            dist/WebTvMux-macOS.zip
-            dist/release/
-
-      # -------------------------------
-      # ✅ Final summary
-      # -------------------------------
-      - name: Final build summary
-        run: |
-          echo "🎉 WebTvMux macOS build complete!"
-          echo ""
-          echo "📂 dist folder contents:"
-          ls -lh dist || true
-          echo ""
-          echo "📏 Size report:"
-          du -sh dist/* | sort -h
-          echo ""
-          echo "✅ Artifacts uploaded to Actions → Artifacts tab."
+          name: WebTvMux-macOS
+          path: dist/WebTvMux-macOS.zip
