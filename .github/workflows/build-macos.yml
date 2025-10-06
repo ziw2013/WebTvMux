@@ -8,6 +8,10 @@ on:
 jobs:
   build-macos:
     runs-on: macos-latest
+    env:
+      APP_NAME: WebTvMux
+      APP_VERSION: "1.0.0"
+
     steps:
       # --- Checkout repository ---
       - name: 🧭 Checkout repository
@@ -25,6 +29,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller==6.* pyside6==6.* upx
 
+      # --- Cleanup old builds ---
+      - name: 🧹 Clean previous builds
+        run: |
+          echo "🧹 Removing previous build artifacts..."
+          rm -rf build dist || true
+          mkdir -p dist/release
+          echo "✅ Clean workspace ready."
+
       # --- Verify binary and config folders before build ---
       - name: 🧩 Verify local bin/config presence
         run: |
@@ -32,53 +44,72 @@ jobs:
           ls -lh bin || echo "❌ bin folder missing!"
           ls -lh config || echo "❌ config folder missing!"
 
-      # --- Run PyInstaller build ---
+      # --- Build macOS app bundle ---
       - name: 🏗️ Build macOS App (.app + DMG)
         run: |
-          echo "🏗️ Building macOS app bundle..."
+          echo "🏗️ Starting macOS app build..."
           python -m PyInstaller build_macos.spec
 
       # --- Verify inclusion inside .app ---
       - name: 🔍 Verify .app contents
         run: |
           echo "🔍 Verifying inclusion of binaries and config..."
-          if [ -d "dist/WebTvMux.app/Contents/MacOS/bin" ]; then
+          APP_PATH="dist/${APP_NAME}.app/Contents/MacOS"
+
+          if [ -d "${APP_PATH}/bin" ]; then
             echo "✅ bin folder found inside .app:"
-            du -sh dist/WebTvMux.app/Contents/MacOS/bin/*
+            du -sh ${APP_PATH}/bin/*
           else
             echo "❌ bin folder missing inside .app!"
             ls -R dist || true
           fi
 
-          if [ -d "dist/WebTvMux.app/Contents/MacOS/config" ]; then
+          if [ -d "${APP_PATH}/config" ]; then
             echo "✅ config folder found inside .app:"
-            ls -lh dist/WebTvMux.app/Contents/MacOS/config
+            ls -lh ${APP_PATH}/config
           else
             echo "❌ config folder missing inside .app!"
           fi
 
-      # --- Create DMG and ZIP ---
+      # --- Create DMG and ZIP packages ---
       - name: 📦 Package .app into DMG and ZIP
         run: |
+          echo "📦 Packaging version ${APP_VERSION}..."
+          RELEASE_DIR="dist/release"
+          APP_PATH="dist/${APP_NAME}.app"
+          DMG_PATH="${RELEASE_DIR}/${APP_NAME}-macOS-v${APP_VERSION}.dmg"
+          ZIP_PATH="${RELEASE_DIR}/${APP_NAME}-macOS-v${APP_VERSION}.zip"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "❌ ERROR: ${APP_PATH} not found!"
+            exit 1
+          fi
+
           echo "📦 Creating DMG..."
-          mkdir -p dist/release
-          hdiutil create -volname WebTvMux \
-            -srcfolder "dist/WebTvMux.app" \
-            -ov -format UDZO "dist/release/WebTvMux.dmg"
+          hdiutil create -volname "${APP_NAME}" \
+            -srcfolder "${APP_PATH}" \
+            -ov -format UDZO "${DMG_PATH}"
 
           echo "📦 Creating ZIP..."
           cd dist
-          zip -r release/WebTvMux.zip WebTvMux.app
+          zip -r "release/${APP_NAME}-macOS-v${APP_VERSION}.zip" "${APP_NAME}.app"
           cd ..
 
           echo "✅ Packaging complete:"
-          du -sh dist/release/*
+          du -sh ${DMG_PATH} ${ZIP_PATH}
 
-      # --- Upload artifacts for download ---
+      # --- Upload artifacts ---
       - name: ⬆️ Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: WebTvMux-macOS
+          name: WebTvMux-macOS-v${{ env.APP_VERSION }}
           path: |
-            dist/release/WebTvMux.dmg
-            dist/release/WebTvMux.zip
+            dist/release/WebTvMux-macOS-v${{ env.APP_VERSION }}.dmg
+            dist/release/WebTvMux-macOS-v${{ env.APP_VERSION }}.zip
+
+      # --- Summary ---
+      - name: ✅ Build summary
+        run: |
+          echo "✅ Build and packaging for WebTvMux v${APP_VERSION} complete."
+          echo "Artifacts:"
+          ls -lh dist/release
