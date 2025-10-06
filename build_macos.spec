@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Final Guaranteed Folder Build)
+# build_macos.spec — WebTvMux (Final Stable Build)
 # ===========================================
 
 import os
@@ -34,17 +34,17 @@ excluded_modules = [
     "PySide6.QtCharts", "PySide6.QtSql", "PySide6.QtPrintSupport",
 ]
 
-# --- Clean previous builds ---
+# --- Clean old build/dist ---
 for d in ["build", "dist"]:
     if os.path.exists(d):
         print(f"🧹 Removing old {d}/ folder...")
         shutil.rmtree(d, ignore_errors=True)
-os.makedirs("dist", exist_ok=True)
 os.makedirs("build/build_macos", exist_ok=True)
+os.makedirs("dist", exist_ok=True)
 
 root = os.path.abspath(".")
 
-# --- Analysis ---
+# --- Base PyInstaller analysis ---
 a = Analysis(
     [entry_script],
     pathex=[root],
@@ -58,7 +58,7 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# ✅ Use temporary name to avoid recursion
+# ✅ Use a temporary name to avoid PyInstaller folder recursion
 app_temp_name = f"{app_name}_temp"
 
 coll = COLLECT(
@@ -72,14 +72,14 @@ coll = COLLECT(
 )
 
 # ===================================================================
-# Post-build: rename folder, add bin/config, build .app + .dmg
+# 🏗️ Post-build logic
 # ===================================================================
 def post_build():
     src_temp = os.path.join("dist", app_temp_name)
     final_folder = os.path.join("dist", app_name)
     app_path = os.path.join("dist", f"{app_name}.app")
 
-    # Wait for temp folder
+    # Wait until folder exists
     for _ in range(30):
         if os.path.isdir(src_temp):
             break
@@ -88,13 +88,19 @@ def post_build():
         print(f"❌ dist/{app_temp_name} not found or not a directory.")
         return
 
-    # --- Rename to final name ---
+    # 🧹 Remove any existing file/folder named dist/WebTvMux
     if os.path.exists(final_folder):
-        shutil.rmtree(final_folder, ignore_errors=True)
+        if os.path.isfile(final_folder):
+            print(f"⚠️ Removing leftover file: {final_folder}")
+            os.remove(final_folder)
+        else:
+            shutil.rmtree(final_folder, ignore_errors=True)
+
+    # ✅ Rename temp → final
     shutil.move(src_temp, final_folder)
     print(f"✅ Renamed build folder: {app_temp_name} → {app_name}")
 
-    # --- Copy bin/config ---
+    # --- Copy bin/config into build ---
     for folder in ["bin", "config"]:
         if os.path.isdir(folder):
             dest = os.path.join(final_folder, folder)
@@ -128,7 +134,7 @@ def post_build():
         f.write(plist)
     print(f"✅ Info.plist written: {plist_path}")
 
-    # --- chmod bin files ---
+    # --- chmod binaries ---
     bin_path = os.path.join(app_path, "Contents", "MacOS", "bin")
     if os.path.isdir(bin_path):
         for file in os.listdir(bin_path):
@@ -145,9 +151,10 @@ def post_build():
     )
     print(f"✅ DMG created: {dmg_path}")
 
-    # --- Print tree summary ---
+    # --- Summary ---
     print("\n📁 Final .app structure:")
     os.system(f"find '{app_path}' -maxdepth 3")
 
+# Only run post-build outside PyInstaller runtime
 if os.environ.get("PYINSTALLER_RUNNING") != "true":
     post_build()

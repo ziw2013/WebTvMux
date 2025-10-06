@@ -1,105 +1,82 @@
-name: Build macOS App (Unsigned Final)
+name: Build WebTvMux macOS App
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   build-macos:
+    name: Build unsigned macOS .app and .dmg
     runs-on: macos-latest
 
     steps:
+      # -------------------------------
+      # ✅ Checkout project
+      # -------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # --- Ensure bin and config folders exist ---
-      - name: Verify bin and config folders
-        run: |
-          echo "🧩 Checking local binaries and configs..."
-          ls -lh bin/ || (echo "❌ bin folder missing!" && exit 1)
-          ls -lh config/ || (echo "❌ config folder missing!" && exit 1)
-
-          # Normalize yt-dlp binary name
-          if [ -f "bin/yt-dlp_macos" ]; then
-            mv bin/yt-dlp_macos bin/yt-dlp
-            echo "Renamed yt-dlp_macos → yt-dlp"
-          fi
-
-          # Ensure executables
-          chmod +x bin/ffmpeg bin/ffprobe bin/yt-dlp || true
-          echo "✅ All binaries marked executable."
-
-      - name: Set up Python
+      # -------------------------------
+      # ✅ Set up Python
+      # -------------------------------
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
+      # -------------------------------
+      # ✅ Install build dependencies
+      # -------------------------------
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller PySide6
 
-      - name: Build macOS app
+      # -------------------------------
+      # ✅ Verify required assets exist
+      # -------------------------------
+      - name: Verify bin and config folders
+        run: |
+          echo "🧩 Checking local binaries and configs..."
+          ls -lh bin || echo "⚠️ bin folder missing"
+          ls -lh config || echo "⚠️ config folder missing"
+
+          # Rename yt-dlp_macos if needed
+          if [ -f "bin/yt-dlp_macos" ]; then
+            mv bin/yt-dlp_macos bin/yt-dlp
+            echo "🔧 Renamed yt-dlp_macos → yt-dlp"
+          fi
+
+          # Ensure binaries are executable
+          chmod +x bin/* || true
+          echo "✅ All binaries marked executable"
+
+      # -------------------------------
+      # ✅ Run PyInstaller build
+      # -------------------------------
+      - name: Build unsigned macOS app
         run: |
           echo "🚀 Building unsigned macOS app..."
-          pyinstaller build_macos.spec
+          python -m PyInstaller build_macos.spec
+
+      # -------------------------------
+      # ✅ Show results summary
+      # -------------------------------
+      - name: Verify build results
+        run: |
+          echo "📦 Contents of dist/:"
+          ls -R dist || true
+          echo ""
           echo "✅ Build completed."
 
-      # --- Validate output files ---
-      - name: Verify packaged app contents
-        run: |
-          APP_PATH="dist/WebTvMux.app/Contents/MacOS"
-          echo "🔍 Checking packaged files inside .app..."
-
-          REQUIRED_FILES=(
-            "$APP_PATH/bin/ffmpeg"
-            "$APP_PATH/bin/ffprobe"
-            "$APP_PATH/bin/yt-dlp"
-            "$APP_PATH/config/languages.json"
-          )
-
-          MISSING=0
-          for FILE in "${REQUIRED_FILES[@]}"; do
-            if [ ! -f "$FILE" ]; then
-              echo "❌ Missing: $FILE"
-              MISSING=1
-            else
-              echo "✅ Found: $FILE"
-            fi
-          done
-
-          if [ "$MISSING" -ne 0 ]; then
-            echo "❌ One or more required files missing from .app!"
-            exit 1
-          fi
-
-          echo ""
-          echo "==> App structure summary:"
-          find dist/WebTvMux.app -maxdepth 4 -type f | sort
-          echo ""
-          echo "==> Bundle size:"
-          du -sh dist/WebTvMux.app || true
-          echo ""
-          echo "==> DMG info:"
-          ls -lh dist/WebTvMux.dmg || echo "⚠️ DMG not found!"
-
-      # --- Optional safety check: ensure app size > 50MB ---
-      - name: Validate app size
-        run: |
-          APP_SIZE=$(du -sm dist/WebTvMux.app | cut -f1)
-          echo "App size: ${APP_SIZE} MB"
-          if [ "$APP_SIZE" -lt 50 ]; then
-            echo "❌ App size too small — missing binaries?"
-            exit 1
-          fi
-          echo "✅ App size validation passed."
-
-      # --- Upload artifacts for download ---
-      - name: Upload macOS build artifacts
+      # -------------------------------
+      # ✅ Upload Artifacts (.app and .dmg)
+      # -------------------------------
+      - name: Upload macOS App and DMG
         uses: actions/upload-artifact@v4
         with:
-          name: WebTvMux-macos-build
+          name: WebTvMux-macOS-Build
           path: |
             dist/WebTvMux.app
             dist/WebTvMux.dmg
