@@ -1,9 +1,11 @@
 # ===========================================
-# build_macos.spec — WebTvMux (Optimized macOS Build)
+# build_macos.spec — WebTvMux (Final macOS Build)
+# Ensures bin/ and config/ included inside Contents/MacOS/
 # ===========================================
 
 import os
 from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.building.build_main import Tree
 
 app_name = "WebTvMux"
 entry_script = "main.py"
@@ -25,7 +27,7 @@ hiddenimports = collect_submodules(
     ),
 )
 
-# --- Exclude heavy and unused modules ---
+# --- Exclude heavy or unused modules ---
 excluded_modules = [
     "tkinter", "numpy", "pandas", "scipy", "matplotlib",
     "PIL", "pytest", "PyQt5",
@@ -38,22 +40,22 @@ excluded_modules = [
     "PySide6.QtPdf",
 ]
 
-# --- Explicitly include binaries and config files ---
-datas = [
-    (os.path.join("bin", "ffmpeg"), "bin"),
-    (os.path.join("bin", "ffprobe"), "bin"),
-    (os.path.join("bin", "yt-dlp"), "bin"),
-    (os.path.join("config", "languages.json"), "config"),
-]
+# --- Include entire folders using Tree() ---
+root = os.path.abspath(".")
+datas = []
+if os.path.isdir(os.path.join(root, "bin")):
+    datas.append(Tree(os.path.join(root, "bin"), prefix="bin"))
+if os.path.isdir(os.path.join(root, "config")):
+    datas.append(Tree(os.path.join(root, "config"), prefix="config"))
 
-print("\n📦 Including resources:")
-for f, dest in datas:
-    print(f"  - {f} → {dest}/")
+print("\n📦 Including folders recursively:")
+for d in datas:
+    print(f"  - {d.name} → {d.prefix}/")
 
-# --- Build analysis ---
+# --- Core Analysis ---
 a = Analysis(
     [entry_script],
-    pathex=[os.path.abspath(".")],
+    pathex=[root],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -61,24 +63,24 @@ a = Analysis(
     noarchive=False,
 )
 
-# --- Package Python code ---
+# --- Package Python bytecode ---
 pyz = PYZ(a.pure)
 
-# --- Build the main executable ---
+# --- Build main executable ---
 exe = EXE(
     pyz,
     a.scripts,
     name=app_name,
-    console=False,  # set True for debugging
-    strip=True,     # ✅ remove debug symbols (smaller)
-    upx=True,       # ✅ compress binaries (safe on macOS arm64)
+    console=False,  # True for debug mode
+    strip=True,     # ✅ remove debug symbols
+    upx=True,       # ✅ compress binary safely
 )
 
-# --- Bundle into .app directly ---
+# --- Create .app bundle directly ---
 app_bundle = BUNDLE(
     exe,
     name=f"{app_name}.app",
-    icon=None,  # Optional: use "icon.icns" if available
+    icon=None,  # Optional: replace with "icon.icns"
     bundle_identifier="com.webtvmux.app",
     info_plist={
         "CFBundleName": app_name,
@@ -88,7 +90,7 @@ app_bundle = BUNDLE(
         "CFBundleIdentifier": "com.webtvmux.app",
         "NSHighResolutionCapable": True,
     },
-    datas=datas,  # ✅ embed bin/ and config/
+    datas=datas,  # ✅ embed bin/ and config folders directly inside Contents/MacOS/
 )
 
-print("\n✅ WebTvMux optimized .app build configuration ready.")
+print("\n✅ macOS .app build configured successfully — bin and config will be inside Contents/MacOS/")
