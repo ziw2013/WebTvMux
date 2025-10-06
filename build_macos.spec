@@ -1,5 +1,5 @@
 # ===========================================
-# build_macos.spec — Final Stable Version (fixed datas)
+# build_macos.spec — Final Stable Mac Build (Tree fix)
 # ===========================================
 
 import os
@@ -10,8 +10,10 @@ from PyInstaller.building.datastruct import Tree
 app_name = "WebTvMux"
 entry_script = "main.py"
 
+# --- Collect PySide6 submodules ---
 hiddenimports = collect_submodules("PySide6")
 
+# --- Exclude heavy / unused modules ---
 excluded_modules = [
     "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets",
     "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtMultimedia",
@@ -20,7 +22,7 @@ excluded_modules = [
     "PySide6.QtShaderTools", "PySide6.QtGraphs"
 ]
 
-# --- Include entire bin/ and config/ folders recursively ---
+# --- Include bin/ and config/ recursively ---
 datas = []
 if os.path.isdir("bin"):
     datas.append(Tree("bin", prefix="bin"))
@@ -29,19 +31,35 @@ if os.path.isdir("config"):
 
 print("📦 Including folders recursively:")
 for d in datas:
-    print(f"  - {getattr(d, 'name', 'unknown')} → {d.prefix}/")
+    try:
+        print(f"  - {os.path.basename(d.name)} → {d.prefix}/")
+    except Exception:
+        print(f"  - Tree({d.root}) → {d.prefix}/")
 
-# --- Core build steps ---
+# --- Core Analysis ---
 a = Analysis(
     [entry_script],
     pathex=["."],
     binaries=[],
-    datas=datas,   # ✅ Tree() objects directly, not tuples
+    datas=[*datas],  # ✅ Unpack list directly; avoids nested tuples
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
 )
 
+# --- Build executable ---
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
-coll = COLLECT(exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=False, name=app_name)
+
+# --- Collect all outputs ---
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name=app_name,
+)
+
+print("\n✅ Build spec successfully parsed. PyInstaller will now proceed.\n")
