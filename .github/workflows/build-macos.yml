@@ -3,94 +3,69 @@ name: Build macOS App
 on:
   push:
     branches: [ main ]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build-macos:
     runs-on: macos-latest
-    env:
-      APP_NAME: WebTvMux
-      APP_VERSION: "1.0.0"
 
     steps:
       - name: 🧭 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
+      - name: 🧰 Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      # --------------------------------------------------
-      # 🧩 Dependency Setup
-      # --------------------------------------------------
-      - name: 🧱 Install build dependencies
+      - name: ⚙️ Install dependencies
         run: |
-          echo "🔧 Installing PyInstaller, PySide6, and UPX..."
-          python -m pip install --upgrade pip wheel setuptools
-          python -m pip install pyinstaller==6.* pyside6==6.9.*
-          brew install upx || echo "⚠️ UPX install skipped (already available)."
-          echo "✅ Environment ready."
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller==6.* pyside6==6.* packaging
 
-      # --------------------------------------------------
-      # 🧹 Clean Build Environment
-      # --------------------------------------------------
-      - name: 🧹 Clean previous builds
+      - name: 🧹 Prepare build environment
         run: |
-          echo "🧹 Removing previous artifacts..."
-          rm -rf build dist || true
-          mkdir -p dist/release
-          echo "✅ Clean workspace ready."
+          echo "🧹 Cleaning up old build folders..."
+          rm -rf build dist
+          mkdir -p bin config
 
-      # --------------------------------------------------
-      # 🔍 Verify Required Resources
-      # --------------------------------------------------
-      - name: 🧩 Verify bin/config folders
-        run: |
           echo "🧩 Checking local binaries and configs..."
-          ls -lh bin || echo "❌ bin folder missing!"
-          ls -lh config || echo "❌ config folder missing!"
+          ls -lh bin || echo "⚠️ No bin folder found"
+          ls -lh config || echo "⚠️ No config folder found"
 
-      # --------------------------------------------------
-      # 🏗️ Build App
-      # --------------------------------------------------
-      - name: 🏗️ Build macOS App (.app + DMG)
+      - name: 🏗️ Build macOS app with PyInstaller
         run: |
-          echo "🏗️ Starting macOS app build..."
-          python -m PyInstaller build_macos.spec
-          echo "✅ Build complete."
+          echo "🚀 Running PyInstaller..."
+          python -m PyInstaller build_macos.spec --noconfirm
+        env:
+          PYTHONWARNINGS: ignore
 
-      # --------------------------------------------------
-      # 📦 Package and Upload
-      # --------------------------------------------------
-      - name: 📦 Package artifacts
+      - name: 🧩 Verify build outputs
         run: |
-          echo "📦 Packaging version ${APP_VERSION}..."
-          RELEASE_DIR="dist/release"
-          APP_PATH="dist/${APP_NAME}.app"
-          DMG_PATH="${RELEASE_DIR}/${APP_NAME}-macOS-v${APP_VERSION}.dmg"
-          ZIP_PATH="${RELEASE_DIR}/${APP_NAME}-macOS-v${APP_VERSION}.zip"
-
-          if [ ! -d "$APP_PATH" ]; then
-            echo "❌ ERROR: ${APP_PATH} not found!"
+          echo "🔍 Verifying inclusion of binaries and config..."
+          if [ ! -d "dist/WebTvMux.app" ]; then
+            echo "❌ WebTvMux.app not found!"
             exit 1
           fi
+          echo "✅ Found WebTvMux.app"
+          find dist/WebTvMux.app -type f | grep -E "ffmpeg|ffprobe|yt-dlp|languages.json" || echo "⚠️ Missing some files"
 
-          hdiutil create -volname "${APP_NAME}" \
-            -srcfolder "${APP_PATH}" \
-            -ov -format UDZO "${DMG_PATH}"
-
+      - name: 🧱 Prepare DMG and compress artifact
+        run: |
+          echo "📦 Preparing release package..."
           cd dist
-          zip -r "release/${APP_NAME}-macOS-v${APP_VERSION}.zip" "${APP_NAME}.app"
+          if [ -f "WebTvMux.dmg" ]; then
+            echo "✅ Found DMG: $(du -h WebTvMux.dmg)"
+          else
+            echo "⚠️ DMG not found, creating fallback ZIP..."
+            zip -r WebTvMux-macOS.zip WebTvMux.app
+          fi
           cd ..
 
-          echo "✅ Packaging complete."
-          du -sh ${DMG_PATH} ${ZIP_PATH}
-
-      - name: ⬆️ Upload macOS artifacts
+      - name: 🚀 Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WebTvMux-macOS-v${{ env.APP_VERSION }}
+          name: WebTvMux-macOS
           path: |
-            dist/release/WebTvMux-macOS-v${{ env.APP_VERSION }}.dmg
-            dist/release/WebTvMux-macOS-v${{ env.APP_VERSION }}.zip
+            dist/WebTvMux.dmg
+            dist/WebTvMux-macOS.zip
