@@ -25,10 +25,12 @@ jobs:
 
       - name: 🧹 Prepare build environment
         run: |
-          echo "🧹 Cleaning up old build folders..."
+          echo "🧹 Cleaning previous build artifacts..."
           rm -rf build dist
+          mkdir -p build/build_macos
           mkdir -p bin config
 
+          echo "📁 Ensured build path exists: build/build_macos"
           echo "🧩 Checking local binaries and configs..."
           ls -lh bin || echo "⚠️ No bin folder found"
           ls -lh config || echo "⚠️ No config folder found"
@@ -40,7 +42,7 @@ jobs:
         env:
           PYTHONWARNINGS: ignore
 
-      - name: 🧩 Verify build outputs
+      - name: 🔍 Verify build outputs
         run: |
           echo "🔍 Verifying inclusion of binaries and config..."
           if [ ! -d "dist/WebTvMux.app" ]; then
@@ -48,16 +50,17 @@ jobs:
             exit 1
           fi
           echo "✅ Found WebTvMux.app"
-          find dist/WebTvMux.app -type f | grep -E "ffmpeg|ffprobe|yt-dlp|languages.json" || echo "⚠️ Missing some files"
+          echo "🧩 Listing embedded resources:"
+          find dist/WebTvMux.app -type f | grep -E "ffmpeg|ffprobe|yt-dlp|languages.json" || echo "⚠️ Some files missing"
 
-      - name: 🧱 Prepare DMG and compress artifact
+      - name: 💽 Create DMG or fallback ZIP
         run: |
           echo "📦 Preparing release package..."
           cd dist
           if [ -f "WebTvMux.dmg" ]; then
-            echo "✅ Found DMG: $(du -h WebTvMux.dmg)"
+            echo "✅ DMG found: $(du -h WebTvMux.dmg)"
           else
-            echo "⚠️ DMG not found, creating fallback ZIP..."
+            echo "⚠️ DMG not found, creating ZIP..."
             zip -r WebTvMux-macOS.zip WebTvMux.app
           fi
           cd ..

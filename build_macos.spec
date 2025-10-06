@@ -1,73 +1,68 @@
-# ======================================================
-# build_macos.spec — WebTvMux macOS Final Stable Build
-# ======================================================
+# ===============================================
+# build_macos.spec — Final Stable (Folder Fix)
+# ===============================================
 
 import os
-import shutil
 import glob
 from PyInstaller.utils.hooks import collect_submodules
-from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
 
 app_name = "WebTvMux"
 entry_script = "main.py"
-build_temp = os.path.join("dist", f"{app_name}_temp")
-final_dist = os.path.join("dist", app_name)
-app_bundle = os.path.join("dist", f"{app_name}.app")
-dmg_path = os.path.join("dist", f"{app_name}.dmg")
 
-# --- Clean build folders first ---
-print("🧹 Cleaning previous build artifacts...")
-for d in ["build", "dist"]:
-    if os.path.exists(d):
-        shutil.rmtree(d, ignore_errors=True)
-os.makedirs(build_temp, exist_ok=True)
+# --- Ensure build folder exists ---
+build_dir = os.path.join("build", "build_macos")
+os.makedirs(build_dir, exist_ok=True)
+print(f"📁 Ensured build path: {build_dir}")
 
-# --- Collect all needed PySide6 submodules ---
-hiddenimports = collect_submodules("PySide6")
+# --- Gather data files ---
+root = os.path.abspath(".")
+datas = []
 
-# --- Exclude heavy unused Qt modules ---
+for folder, dest in [("bin", "bin"), ("config", "config")]:
+    folder_path = os.path.join(root, folder)
+    if os.path.isdir(folder_path):
+        for f in glob.glob(os.path.join(folder_path, "*")):
+            if os.path.isfile(f):
+                datas.append((os.path.abspath(f), dest))
+print("\n📦 Including data files:")
+for f, dest in datas:
+    print(f"  - {f} → {dest}//")
+
+# --- Hidden imports (minimal Qt) ---
+hiddenimports = collect_submodules(
+    "PySide6",
+    filter=lambda m: not (
+        m.startswith("PySide6.QtQml")
+        or m.startswith("PySide6.QtQuick")
+        or m.startswith("PySide6.QtWebEngine")
+        or m.startswith("PySide6.QtMultimedia")
+        or m.startswith("PySide6.QtCharts")
+        or m.startswith("PySide6.QtDataVisualization")
+        or m.startswith("PySide6.Qt3DCore")
+        or m.startswith("PySide6.QtGraphs")
+    ),
+)
+
 excluded_modules = [
-    "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets",
-    "PySide6.QtWebEngineQuick", "PySide6.QtQml", "PySide6.QtQuick",
-    "PySide6.QtMultimedia", "PySide6.QtPdf", "PySide6.Qt3DCore",
-    "PySide6.Qt3DRender", "PySide6.QtQuick3D", "PySide6.QtCharts",
-    "PySide6.QtSql", "PySide6.QtShaderTools", "PySide6.QtGraphs",
-    "PySide6.QtQuick3DRuntimeRender"
+    "tkinter", "numpy", "pandas", "scipy", "matplotlib",
+    "PIL", "PyQt5", "pytest",
 ]
 
-# --- Add binary + config data ---
-datas = []
-def include_folder(src, dest):
-    folder_path = os.path.abspath(src)
-    if os.path.isdir(folder_path):
-        for root, _, files in os.walk(folder_path):
-            for f in files:
-                full_path = os.path.join(root, f)
-                rel_path = os.path.relpath(full_path, folder_path)
-                datas.append((full_path, os.path.join(dest, os.path.dirname(rel_path))))
-
-include_folder("bin", "bin")
-include_folder("config", "config")
-
-print("📦 Including data files:")
-for src, dest in datas:
-    print(f"  - {src} → {dest}/")
-
-# --- Main build phase ---
+# --- Analysis ---
 a = Analysis(
     [entry_script],
-    pathex=["."],
+    pathex=[root],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=excluded_modules,
     noarchive=False,
+    name="build_macos",
 )
 
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, name=app_name, console=False)
 
-# --- Collect output to temp dir ---
 coll = COLLECT(
     exe,
     a.binaries,
@@ -75,46 +70,21 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name=os.path.basename(build_temp),
-    destdir=os.path.dirname(build_temp),
+    name=app_name,
 )
 
-# --- Post-build bundle creation ---
-print("\n📦 Creating macOS .app bundle...")
+# --- Post Build: Create DMG ---
+if __name__ == "__main__":
+    import subprocess
+    app_path = os.path.join("dist", f"{app_name}.app")
+    dmg_path = os.path.join("dist", f"{app_name}.dmg")
 
-def create_app_bundle():
-    if os.path.exists(app_bundle):
-        shutil.rmtree(app_bundle)
-    os.makedirs(os.path.join(app_bundle, "Contents", "MacOS"), exist_ok=True)
-    os.makedirs(os.path.join(app_bundle, "Contents", "Resources"), exist_ok=True)
-
-    # Move collected app into Contents/MacOS
-    shutil.move(build_temp, os.path.join(app_bundle, "Contents", "MacOS", app_name))
-
-    # Write Info.plist
-    info_plist = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleName</key><string>{app_name}</string>
-    <key>CFBundleDisplayName</key><string>{app_name}</string>
-    <key>CFBundleExecutable</key><string>{app_name}</string>
-    <key>CFBundleIdentifier</key><string>com.webtvmux.app</string>
-    <key>CFBundleVersion</key><string>1.0.0</string>
-    <key>CFBundleShortVersionString</key><string>1.0.0</string>
-    <key>LSMinimumSystemVersion</key><string>11.0</string>
-    <key>NSHighResolutionCapable</key><true/>
-</dict>
-</plist>"""
-    with open(os.path.join(app_bundle, "Contents", "Info.plist"), "w") as f:
-        f.write(info_plist)
-
-    print(f"✅ App bundle created: {app_bundle}")
-
-    # --- Create .dmg ---
-    print("📦 Creating DMG image...")
-    os.system(f"hdiutil create -volname {app_name} -srcfolder '{app_bundle}' -ov -format UDZO '{dmg_path}'")
-    print(f"✅ DMG created: {dmg_path}")
-
-create_app_bundle()
-print(f"\n🎉 Build complete! Output: {app_bundle} and {dmg_path}\n")
+    if os.path.isdir(app_path):
+        print(f"📦 Creating DMG: {dmg_path}")
+        subprocess.run(
+            ["hdiutil", "create", "-volname", app_name, "-srcfolder", app_path, "-ov", "-format", "UDZO", dmg_path],
+            check=False,
+        )
+        print(f"✅ DMG created successfully at: {dmg_path}")
+    else:
+        print(f"⚠️ Could not find {app_path}, skipping DMG creation.")
